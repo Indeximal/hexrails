@@ -82,6 +82,19 @@ impl Default for FlyCamera2d {
     }
 }
 
+pub fn current_cursor_world_pos(
+    cam_pos: &Transform,
+    proj: &OrthographicProjection,
+    window: &Window,
+) -> Vec2 {
+    let window_size = Vec2::new(window.width(), window.height());
+    let mouse_normalized_screen_pos =
+        (window.cursor_position().unwrap() / window_size) * 2. - Vec2::ONE;
+    let mouse_world_pos = cam_pos.translation.truncate()
+        + mouse_normalized_screen_pos * Vec2::new(proj.right, proj.top) * proj.scale;
+    mouse_world_pos
+}
+
 fn movement_axis(input: &Res<Input<KeyCode>>, plus: KeyCode, minus: KeyCode) -> f32 {
     let mut axis = 0.0;
     if input.pressed(plus) {
@@ -154,6 +167,7 @@ fn zoom_system(
 
     let (options, mut pos, mut cam) = cam.single_mut();
 
+    // Minor code duplication with the current_cursor_world_pos function
     let window = windows.get_primary().unwrap();
     let window_size = Vec2::new(window.width(), window.height());
     let mouse_normalized_screen_pos =

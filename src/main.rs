@@ -1,9 +1,11 @@
 use bevy::prelude::*;
 use camera::MovingCameraPlugin;
 use terrain::TerrainPlugin;
+use tilemap::TileMapPlugin;
 
 mod camera;
 mod terrain;
+mod tilemap;
 
 pub const BG_COLOR: Color = Color::rgb(0.7, 0.7, 0.7);
 pub const ASPECT_RATIO: f32 = 16.0 / 9.0;
@@ -31,6 +33,7 @@ impl Plugin for HexRailsPlugin {
             })
             .add_startup_system(print_version)
             .add_plugin(TerrainPlugin)
+            .add_plugin(TileMapPlugin)
             .add_plugin(MovingCameraPlugin);
     }
 }

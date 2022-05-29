@@ -1,55 +1,13 @@
+use crate::tilemap::*;
 use bevy::prelude::*;
-
-pub const TILE_SCALE: f32 = 0.5;
-pub const TILE_SIZE: f32 = 128.;
-const SQRT3_HALF: f32 = 0.866025404;
 
 pub struct TerrainPlugin;
 
 impl Plugin for TerrainPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system_to_stage(StartupStage::PreStartup, load_texture_atlas)
-            .add_startup_system(spawn_tiles);
-    }
-}
-
-#[derive(Component, Clone, Copy)]
-pub struct TileCoordinate((i32, i32));
-
-impl TileCoordinate {
-    fn east(&self) -> TileCoordinate {
-        TileCoordinate((self.0 .0 + 1, self.0 .1))
-    }
-
-    fn west(&self) -> TileCoordinate {
-        TileCoordinate((self.0 .0 - 1, self.0 .1))
-    }
-
-    fn north_east(&self) -> TileCoordinate {
-        TileCoordinate((self.0 .0, self.0 .1 + 1))
-    }
-
-    fn north_west(&self) -> TileCoordinate {
-        TileCoordinate((self.0 .0 - 1, self.0 .1 + 1))
-    }
-
-    fn south_east(&self) -> TileCoordinate {
-        TileCoordinate((self.0 .0 + 1, self.0 .1 - 1))
-    }
-
-    fn south_west(&self) -> TileCoordinate {
-        TileCoordinate((self.0 .0, self.0 .1 - 1))
-    }
-}
-
-impl From<TileCoordinate> for Vec2 {
-    fn from(tc: TileCoordinate) -> Self {
-        let (x, y) = tc.0;
-        let yy = y as f32 * TILE_SCALE;
-        Vec2::new(
-            x as f32 * TILE_SCALE * SQRT3_HALF + SQRT3_HALF / 2. * yy,
-            yy * 0.75,
-        )
+            .add_startup_system(spawn_tiles)
+            .add_system(tile_builder);
     }
 }
 
@@ -61,6 +19,16 @@ enum TerrainType {
 #[derive(Component)]
 struct Tile {
     terrain_type: TerrainType,
+}
+
+fn tile_builder(
+    mut commands: Commands,
+    atlas_h: Res<TerrainAtlas>,
+    mut click_event: EventReader<TileClickEvent>,
+) {
+    for evt in click_event.iter() {
+        spawn_terrain_tile(&mut commands, &atlas_h, TerrainType::Red, evt.coord);
+    }
 }
 
 fn spawn_tiles(mut commands: Commands, atlas_h: Res<TerrainAtlas>) {
