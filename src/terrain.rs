@@ -6,8 +6,7 @@ pub struct TerrainPlugin;
 impl Plugin for TerrainPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system_to_stage(StartupStage::PreStartup, load_texture_atlas)
-            .add_startup_system(spawn_tiles)
-            .add_system(tile_builder);
+            .add_startup_system(spawn_tiles);
     }
 }
 
@@ -19,16 +18,6 @@ enum TerrainType {
 #[derive(Component)]
 struct Tile {
     terrain_type: TerrainType,
-}
-
-fn tile_builder(
-    mut commands: Commands,
-    atlas_h: Res<TerrainAtlas>,
-    mut click_event: EventReader<TileClickEvent>,
-) {
-    for evt in click_event.iter() {
-        spawn_terrain_tile(&mut commands, &atlas_h, TerrainType::Red, evt.coord);
-    }
 }
 
 fn spawn_tiles(mut commands: Commands, atlas_h: Res<TerrainAtlas>) {
@@ -75,7 +64,6 @@ fn spawn_terrain_tile(
             },
             ..Default::default()
         })
-        .insert(Name::new("idk"))
         .insert(Tile { terrain_type })
         .insert(position);
 }
@@ -87,7 +75,7 @@ fn load_texture_atlas(
     asset_server: Res<AssetServer>,
     mut texture_atlas: ResMut<Assets<TextureAtlas>>,
 ) {
-    let image = asset_server.load("Grasstile.png");
+    let image = asset_server.load("TerrainAtlas.png");
     let atlas = TextureAtlas::from_grid_with_padding(
         image,
         Vec2::new(TILE_SIZE, TILE_SIZE),

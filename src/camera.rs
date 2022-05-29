@@ -86,13 +86,13 @@ pub fn current_cursor_world_pos(
     cam_pos: &Transform,
     proj: &OrthographicProjection,
     window: &Window,
-) -> Vec2 {
+) -> Option<Vec2> {
     let window_size = Vec2::new(window.width(), window.height());
-    let mouse_normalized_screen_pos =
-        (window.cursor_position().unwrap() / window_size) * 2. - Vec2::ONE;
+    let window_pos = window.cursor_position()?;
+    let mouse_normalized_screen_pos = (window_pos / window_size) * 2. - Vec2::ONE;
     let mouse_world_pos = cam_pos.translation.truncate()
         + mouse_normalized_screen_pos * Vec2::new(proj.right, proj.top) * proj.scale;
-    mouse_world_pos
+    Some(mouse_world_pos)
 }
 
 fn movement_axis(input: &Res<Input<KeyCode>>, plus: KeyCode, minus: KeyCode) -> f32 {

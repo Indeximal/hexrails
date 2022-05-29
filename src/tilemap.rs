@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use bevy::{input::mouse::MouseButtonInput, prelude::*};
 
 use crate::camera::current_cursor_world_pos;
@@ -19,6 +21,7 @@ pub struct TileClickEvent {
     pub side: TileSide,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum TileSide {
     Center,
     East,
@@ -27,6 +30,43 @@ pub enum TileSide {
     NorthWest,
     SouthEast,
     SouthWest,
+}
+
+impl TileSide {
+    pub fn from_world_pos(world_pos: Vec2) -> TileSide {
+        let tc = TileCoordinate::from(world_pos);
+        let tc_center = Vec2::from(tc);
+        let diff = world_pos - tc_center;
+        if diff.length_squared() <= (TILE_SCALE / 2.) * (TILE_SCALE / 2.) * 0.1 {
+            return TileSide::Center;
+        }
+        let angle = diff.angle_between(Vec2::X);
+        if angle.abs() <= PI / 6. {
+            TileSide::East
+        } else if angle.abs() >= PI * 5. / 6. {
+            TileSide::West
+        } else if angle <= -PI / 2. {
+            TileSide::NorthWest
+        } else if angle >= PI / 2. {
+            TileSide::SouthWest
+        } else if angle >= 0. {
+            TileSide::SouthEast
+        } else {
+            TileSide::NorthEast
+        }
+    }
+
+    pub fn to_angle(&self) -> f32 {
+        match self {
+            TileSide::Center => 0.,
+            TileSide::East => 0.,
+            TileSide::NorthEast => PI * 1. / 3.,
+            TileSide::NorthWest => PI * 2. / 3.,
+            TileSide::West => PI,
+            TileSide::SouthWest => PI * 4. / 3.,
+            TileSide::SouthEast => PI * 5. / 3.,
+        }
+    }
 }
 
 #[derive(Component, Debug, Clone, Copy)]
@@ -81,13 +121,19 @@ fn mouse_button_events(
             return;
         }
     };
+    let world_pos = match current_cursor_world_pos(pos, cam, window) {
+        Some(v) => v,
+        None => {
+            return;
+        }
+    };
 
     for ev in mousebtn_evr.iter() {
         match ev.state {
             ElementState::Pressed => {}
             ElementState::Released => click_event.send(TileClickEvent {
-                coord: TileCoordinate::from(current_cursor_world_pos(pos, cam, window)),
-                side: TileSide::Center,
+                coord: TileCoordinate::from(world_pos),
+                side: TileSide::from_world_pos(world_pos),
             }),
         }
     }

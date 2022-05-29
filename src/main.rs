@@ -1,9 +1,11 @@
 use bevy::prelude::*;
 use camera::MovingCameraPlugin;
+use railroad::RailRoadPlugin;
 use terrain::TerrainPlugin;
 use tilemap::TileMapPlugin;
 
 mod camera;
+mod railroad;
 mod terrain;
 mod tilemap;
 
@@ -34,6 +36,7 @@ impl Plugin for HexRailsPlugin {
             .add_startup_system(print_version)
             .add_plugin(TerrainPlugin)
             .add_plugin(TileMapPlugin)
+            .add_plugin(RailRoadPlugin)
             .add_plugin(MovingCameraPlugin);
     }
 }
