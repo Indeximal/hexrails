@@ -19,9 +19,10 @@ impl Plugin for TileMapPlugin {
 pub struct TileClickEvent {
     pub coord: TileCoordinate,
     pub side: TileSide,
+    pub button: MouseButton,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TileSide {
     Center,
     East,
@@ -65,6 +66,18 @@ impl TileSide {
             TileSide::West => PI,
             TileSide::SouthWest => PI * 4. / 3.,
             TileSide::SouthEast => PI * 5. / 3.,
+        }
+    }
+
+    pub fn opposite(&self) -> TileSide {
+        match self {
+            TileSide::Center => TileSide::Center,
+            TileSide::East => TileSide::West,
+            TileSide::NorthEast => TileSide::SouthWest,
+            TileSide::NorthWest => TileSide::SouthEast,
+            TileSide::West => TileSide::East,
+            TileSide::SouthWest => TileSide::NorthEast,
+            TileSide::SouthEast => TileSide::NorthWest,
         }
     }
 }
@@ -134,6 +147,7 @@ fn mouse_button_events(
             ElementState::Released => click_event.send(TileClickEvent {
                 coord: TileCoordinate::from(world_pos),
                 side: TileSide::from_world_pos(world_pos),
+                button: ev.button,
             }),
         }
     }

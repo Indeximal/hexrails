@@ -1,6 +1,8 @@
 use crate::tilemap::*;
 use bevy::prelude::*;
 
+const Z_LAYER_RAILS: f32 = 200.;
+
 pub struct RailRoadPlugin;
 
 impl Plugin for RailRoadPlugin {
@@ -13,13 +15,36 @@ impl Plugin for RailRoadPlugin {
 #[derive(Component)]
 struct RailTile {}
 
+#[derive(Debug)]
+enum RailType {
+    Straight,
+    CurvedLeft,
+    CurvedRight,
+}
+
 fn rail_builder(
     mut commands: Commands,
     atlas_h: Res<RailAtlas>,
     mut click_event: EventReader<TileClickEvent>,
 ) {
     for evt in click_event.iter() {
-        spawn_rail(&mut commands, &atlas_h, evt.coord, evt.side);
+        match evt.button {
+            MouseButton::Left => spawn_rail(
+                &mut commands,
+                &atlas_h,
+                evt.coord,
+                evt.side,
+                RailType::Straight,
+            ),
+            MouseButton::Right => spawn_rail(
+                &mut commands,
+                &atlas_h,
+                evt.coord,
+                evt.side,
+                RailType::CurvedRight,
+            ),
+            _ => (),
+        }
     }
 }
 
@@ -28,8 +53,18 @@ fn spawn_rail(
     atlas: &Res<RailAtlas>,
     position: TileCoordinate,
     start_side: TileSide,
+    rail_type: RailType,
 ) {
-    let index = 0;
+    let index = match rail_type {
+        RailType::Straight => 0,
+        RailType::CurvedLeft => 1,
+        RailType::CurvedRight => 1,
+    };
+    let scale_x = match rail_type {
+        RailType::Straight => 1.,
+        RailType::CurvedLeft => -1.,
+        RailType::CurvedRight => 1.,
+    };
     let mut sprite = TextureAtlasSprite::new(index);
     sprite.custom_size = Some(Vec2::splat(TILE_SCALE));
 
@@ -38,9 +73,9 @@ fn spawn_rail(
             sprite: sprite,
             texture_atlas: atlas.0.clone(),
             transform: Transform {
-                translation: Vec3::from((position.into(), 200.)),
+                translation: Vec3::from((position.into(), Z_LAYER_RAILS)),
                 rotation: Quat::from_rotation_z(start_side.to_angle()),
-                ..Default::default()
+                scale: Vec3::from((scale_x, 1., 1.)),
             },
             ..Default::default()
         })
@@ -56,7 +91,7 @@ fn load_texture_atlas(
     mut texture_atlas: ResMut<Assets<TextureAtlas>>,
 ) {
     let image = asset_server.load("RailAtlas.png");
-    let atlas = TextureAtlas::from_grid(image, Vec2::new(TILE_SIZE, TILE_SIZE), 1, 1);
+    let atlas = TextureAtlas::from_grid(image, Vec2::new(TILE_SIZE, TILE_SIZE), 1, 2);
     let atlas_handle = texture_atlas.add(atlas);
     commands.insert_resource(RailAtlas(atlas_handle));
 }
