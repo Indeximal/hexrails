@@ -1,10 +1,12 @@
 use bevy::prelude::*;
 use camera::MovingCameraPlugin;
+use debug::DebugPlugin;
 use railroad::RailRoadPlugin;
 use terrain::TerrainPlugin;
 use tilemap::TileMapPlugin;
 
 mod camera;
+mod debug;
 mod railroad;
 mod terrain;
 mod tilemap;
@@ -16,6 +18,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugin(HexRailsPlugin)
+        .add_plugin(DebugPlugin)
         .run();
 }
 pub struct HexRailsPlugin;

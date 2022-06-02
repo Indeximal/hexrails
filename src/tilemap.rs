@@ -1,6 +1,7 @@
 use std::f32::consts::PI;
 
 use bevy::{input::mouse::MouseButtonInput, prelude::*};
+use bevy_inspector_egui::Inspectable;
 
 use crate::camera::current_cursor_world_pos;
 
@@ -82,7 +83,7 @@ impl TileSide {
     }
 }
 
-#[derive(Component, Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy, Inspectable)]
 pub struct TileCoordinate(pub (i32, i32));
 
 impl TileCoordinate {

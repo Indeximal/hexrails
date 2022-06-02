@@ -20,6 +20,9 @@ struct Tile {
     terrain_type: TerrainType,
 }
 
+#[derive(Component)]
+struct TerrainMap;
+
 fn spawn_tiles(mut commands: Commands, atlas_h: Res<TerrainAtlas>) {
     const RADIUS: i32 = 3;
     for y in -RADIUS..=RADIUS {
@@ -39,6 +42,13 @@ fn spawn_tiles(mut commands: Commands, atlas_h: Res<TerrainAtlas>) {
             );
         }
     }
+}
+
+fn spawn_map_root(commands: &mut Commands) {
+    commands
+        .spawn()
+        .insert(Name::new("Terrain"))
+        .insert(TerrainMap);
 }
 
 fn spawn_terrain_tile(
@@ -64,6 +74,7 @@ fn spawn_terrain_tile(
             },
             ..Default::default()
         })
+        .insert(Name::new(format!("Tile {:?}", position.0)))
         .insert(Tile { terrain_type })
         .insert(position);
 }

@@ -79,6 +79,7 @@ fn spawn_rail(
             },
             ..Default::default()
         })
+        .insert(Name::new(format!("Rail {:?}", position.0)))
         .insert(RailTile {})
         .insert(position);
 }
