@@ -16,12 +16,7 @@ enum TerrainType {
 }
 
 #[derive(Component)]
-struct Tile {
-    terrain_type: TerrainType,
-}
-
-#[derive(Component)]
-struct TerrainMap;
+struct Tile {}
 
 fn spawn_tiles(mut commands: Commands, atlas_h: Res<TerrainAtlas>) {
     const RADIUS: i32 = 3;
@@ -44,13 +39,6 @@ fn spawn_tiles(mut commands: Commands, atlas_h: Res<TerrainAtlas>) {
     }
 }
 
-fn spawn_map_root(commands: &mut Commands) {
-    commands
-        .spawn()
-        .insert(Name::new("Terrain"))
-        .insert(TerrainMap);
-}
-
 fn spawn_terrain_tile(
     commands: &mut Commands,
     atlas: &Res<TerrainAtlas>,
@@ -63,6 +51,8 @@ fn spawn_terrain_tile(
     };
     let mut sprite = TextureAtlasSprite::new(index);
     sprite.custom_size = Some(Vec2::splat(TILE_SCALE));
+    // Temporary to see the debug lines
+    sprite.color = Color::rgba(1., 1., 1., 0.7);
 
     commands
         .spawn_bundle(SpriteSheetBundle {
@@ -75,7 +65,7 @@ fn spawn_terrain_tile(
             ..Default::default()
         })
         .insert(Name::new(format!("Tile {:?}", position.0)))
-        .insert(Tile { terrain_type })
+        .insert(Tile {})
         .insert(position);
 }
 

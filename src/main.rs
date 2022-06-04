@@ -45,5 +45,5 @@ impl Plugin for HexRailsPlugin {
 }
 
 fn print_version() {
-    println!("Build with Bevy!");
+    info!("Build with Bevy!");
 }

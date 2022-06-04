@@ -23,7 +23,7 @@ pub struct TileClickEvent {
     pub button: MouseButton,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum TileSide {
     Center,
     East,
@@ -83,11 +83,20 @@ impl TileSide {
     }
 }
 
-#[derive(Component, Debug, Clone, Copy, Inspectable)]
+#[derive(Component, Debug, Clone, Copy, Inspectable, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TileCoordinate(pub (i32, i32));
 
+/// This is the face of the tile at coordinate `tile` facing *from* `side`.
+/// e.g (0, 0) EAST is the right part of the origin tile, but when used as an
+/// coordinate for a rail this rail is going east to west (or south/north-west).
+#[derive(Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
+pub struct TileFace {
+    pub tile: TileCoordinate,
+    pub side: TileSide,
+}
+
 impl TileCoordinate {
-    fn neighbor(&self, side: TileSide) -> TileCoordinate {
+    pub fn neighbor(&self, side: TileSide) -> TileCoordinate {
         match side {
             TileSide::Center => TileCoordinate((self.0 .0, self.0 .1)),
             TileSide::East => TileCoordinate((self.0 .0 + 1, self.0 .1)),

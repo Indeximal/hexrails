@@ -1,5 +1,6 @@
 use crate::tilemap::*;
 use bevy::prelude::*;
+use petgraph::graphmap::DiGraphMap;
 
 const Z_LAYER_RAILS: f32 = 200.;
 
@@ -8,43 +9,94 @@ pub struct RailRoadPlugin;
 impl Plugin for RailRoadPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system_to_stage(StartupStage::PreStartup, load_texture_atlas)
+            .add_startup_system(load_rail_graph)
             .add_system(rail_builder);
     }
 }
 
-#[derive(Component)]
-struct RailTile {}
+pub struct RailGraph {
+    pub graph: DiGraphMap<TileFace, ()>,
+}
 
-#[derive(Debug)]
-enum RailType {
+#[derive(Component)]
+pub struct RailTile {}
+
+#[derive(Debug, Clone, Copy)]
+pub enum RailType {
     Straight,
     CurvedLeft,
     CurvedRight,
+}
+
+impl TileFace {
+    pub fn next_face_with(&self, rail: RailType) -> TileFace {
+        match rail {
+            // temporary, should be different for the types
+            _ => TileFace {
+                tile: self.tile.neighbor(self.side.opposite()),
+                side: self.side,
+            },
+        }
+    }
 }
 
 fn rail_builder(
     mut commands: Commands,
     atlas_h: Res<RailAtlas>,
     mut click_event: EventReader<TileClickEvent>,
+    mut rail_graph: ResMut<RailGraph>,
 ) {
+    let rail_graph = rail_graph.as_mut();
     for evt in click_event.iter() {
         match evt.button {
-            MouseButton::Left => spawn_rail(
+            MouseButton::Left => build_rail(
                 &mut commands,
                 &atlas_h,
+                rail_graph,
                 evt.coord,
                 evt.side,
                 RailType::Straight,
             ),
-            MouseButton::Right => spawn_rail(
+            MouseButton::Right => build_rail(
                 &mut commands,
                 &atlas_h,
+                rail_graph,
                 evt.coord,
                 evt.side,
                 RailType::CurvedRight,
             ),
+            MouseButton::Middle => build_rail(
+                &mut commands,
+                &atlas_h,
+                rail_graph,
+                evt.coord,
+                evt.side,
+                RailType::CurvedLeft,
+            ),
             _ => (),
         }
+    }
+}
+
+fn build_rail(
+    commands: &mut Commands,
+    atlas: &Res<RailAtlas>,
+    rail_graph: &mut RailGraph,
+    position: TileCoordinate,
+    start_side: TileSide,
+    rail_type: RailType,
+) {
+    let start_face = TileFace {
+        tile: position,
+        side: start_side,
+    };
+    let end_face = start_face.next_face_with(rail_type);
+
+    let edge = rail_graph.graph.add_edge(start_face, end_face, ());
+    // if the edge didn't previously exist:
+    if edge.is_none() {
+        info!("{:?} -> {:?}", start_face.tile.0, end_face.tile.0);
+        spawn_rail(commands, atlas, position, start_side, rail_type);
     }
 }
 
@@ -60,13 +112,14 @@ fn spawn_rail(
         RailType::CurvedLeft => 1,
         RailType::CurvedRight => 1,
     };
-    let scale_x = match rail_type {
-        RailType::Straight => 1.,
-        RailType::CurvedLeft => -1.,
-        RailType::CurvedRight => 1.,
+    let flipped = match rail_type {
+        RailType::Straight => false,
+        RailType::CurvedLeft => true,
+        RailType::CurvedRight => false,
     };
     let mut sprite = TextureAtlasSprite::new(index);
     sprite.custom_size = Some(Vec2::splat(TILE_SCALE));
+    sprite.flip_y = flipped;
 
     commands
         .spawn_bundle(SpriteSheetBundle {
@@ -75,7 +128,7 @@ fn spawn_rail(
             transform: Transform {
                 translation: Vec3::from((position.into(), Z_LAYER_RAILS)),
                 rotation: Quat::from_rotation_z(start_side.to_angle()),
-                scale: Vec3::from((scale_x, 1., 1.)),
+                ..Default::default()
             },
             ..Default::default()
         })
@@ -85,6 +138,12 @@ fn spawn_rail(
 }
 
 struct RailAtlas(Handle<TextureAtlas>);
+
+fn load_rail_graph(mut commands: Commands) {
+    commands.insert_resource(RailGraph {
+        graph: DiGraphMap::new(),
+    })
+}
 
 fn load_texture_atlas(
     mut commands: Commands,
