@@ -135,7 +135,7 @@ fn spawn_rail(
             sprite: sprite,
             texture_atlas: atlas.0.clone(),
             transform: Transform {
-                translation: Vec3::from((position.into(), Z_LAYER_RAILS)),
+                translation: position.into_world_pos().extend(Z_LAYER_RAILS),
                 rotation: Quat::from_rotation_z(start_side.to_angle()),
                 ..Default::default()
             },

@@ -1,6 +1,8 @@
 use crate::tilemap::*;
 use bevy::prelude::*;
 
+const Z_LAYER_TERRAIN: f32 = 100.;
+
 pub struct TerrainPlugin;
 
 impl Plugin for TerrainPlugin {
@@ -59,7 +61,7 @@ fn spawn_terrain_tile(
             sprite: sprite,
             texture_atlas: atlas.0.clone(),
             transform: Transform {
-                translation: Vec3::from((position.into(), 100.)),
+                translation: position.into_world_pos().extend(Z_LAYER_TERRAIN),
                 ..Default::default()
             },
             ..Default::default()

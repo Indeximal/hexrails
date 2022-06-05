@@ -42,8 +42,8 @@ impl TileSide {
     }
 
     pub fn from_world_pos(world_pos: Vec2) -> Option<TileSide> {
-        let tc = TileCoordinate::from(world_pos);
-        let tc_center = Vec2::from(tc);
+        let tc = TileCoordinate::from_world_pos(world_pos);
+        let tc_center = tc.into_world_pos();
         let diff = world_pos - tc_center;
         if diff.length_squared() <= (TILE_SCALE / 2.) * (TILE_SCALE / 2.) * 0.1 {
             return None;
@@ -96,25 +96,47 @@ impl TileCoordinate {
             _ => panic!("Tile side not in range 0..6"),
         }
     }
-}
 
-impl From<TileCoordinate> for Vec2 {
-    fn from(tc: TileCoordinate) -> Self {
-        let (x, y) = (tc.0, tc.1);
+    pub fn into_world_pos(&self) -> Vec2 {
+        let (x, y) = (self.0, self.1);
         let yy = y as f32 * TILE_SCALE;
         Vec2::new(
             x as f32 * TILE_SCALE * SQRT3_HALF + SQRT3_HALF / 2. * yy,
             yy * 0.75,
         )
     }
-}
 
-impl From<Vec2> for TileCoordinate {
-    // This does not currently respect hexagonal boundries
-    fn from(world_pos: Vec2) -> Self {
+    fn nearer_tile(
+        tile1: TileCoordinate,
+        tile2: TileCoordinate,
+        world_pos: Vec2,
+    ) -> TileCoordinate {
+        if tile1.into_world_pos().distance_squared(world_pos)
+            < tile2.into_world_pos().distance_squared(world_pos)
+        {
+            tile1
+        } else {
+            tile2
+        }
+    }
+
+    /// This returns the tile coordinate of tile the world_pos vector is in.
+    pub fn from_world_pos(world_pos: Vec2) -> TileCoordinate {
         let yy = world_pos.y / 0.75;
         let x = (world_pos.x - SQRT3_HALF / 2. * yy) / (TILE_SCALE * SQRT3_HALF);
-        TileCoordinate(x.round() as i32, (yy / TILE_SCALE).round() as i32)
+        let y = yy / TILE_SCALE;
+
+        // After the linear transformation only four tiles are possible:
+        // two that touch and two to either side of them called near and far here.
+        let south_west_tile = TileCoordinate(x.floor() as i32, y.floor() as i32);
+        let north_east_tile = TileCoordinate(x.ceil() as i32, y.ceil() as i32);
+        let far_diagonal_tile = Self::nearer_tile(south_west_tile, north_east_tile, world_pos);
+
+        let south_tile = TileCoordinate(x.ceil() as i32, y.floor() as i32);
+        let north_tile = TileCoordinate(x.floor() as i32, y.ceil() as i32);
+        let near_diagonal_tile = Self::nearer_tile(south_tile, north_tile, world_pos);
+
+        Self::nearer_tile(far_diagonal_tile, near_diagonal_tile, world_pos)
     }
 }
 
@@ -144,7 +166,7 @@ fn mouse_button_events(
         match ev.state {
             ElementState::Pressed => {}
             ElementState::Released => click_event.send(TileClickEvent {
-                coord: TileCoordinate::from(world_pos),
+                coord: TileCoordinate::from_world_pos(world_pos),
                 side: TileSide::from_world_pos(world_pos),
                 button: ev.button,
             }),

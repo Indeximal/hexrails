@@ -21,7 +21,7 @@ impl Plugin for DebugPlugin {
 }
 
 fn face_position(face: TileFace) -> Vec3 {
-    let origin = Vec2::from(face.tile);
+    let origin = face.tile.into_world_pos();
     let angle = face.side.to_angle();
     let offset = Vec2::new(angle.cos(), angle.sin()) * TILE_SCALE / 2. * 0.6;
     (origin + offset).extend(999.)
