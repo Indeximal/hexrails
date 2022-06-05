@@ -9,6 +9,7 @@ edition = "2021"
 # sudo apt install g++ pkg-config libx11-dev libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
 bevy = { version = "0.7", features = ["dynamic"] }
 bevy-inspector-egui = "0.11.0"
-petgraph = "0.6.2"
 bevy_prototype_debug_lines = "0.7.1"
+petgraph = "0.6.2"
+
 

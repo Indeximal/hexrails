@@ -31,10 +31,17 @@ pub enum RailType {
 impl TileFace {
     pub fn next_face_with(&self, rail: RailType) -> TileFace {
         match rail {
-            // temporary, should be different for the types
-            _ => TileFace {
+            RailType::Straight => TileFace {
                 tile: self.tile.neighbor(self.side.opposite()),
                 side: self.side,
+            },
+            RailType::CurvedLeft => TileFace {
+                tile: self.tile.neighbor(self.side.curve_left()),
+                side: self.side.curve_left().opposite(),
+            },
+            RailType::CurvedRight => TileFace {
+                tile: self.tile.neighbor(self.side.curve_right()),
+                side: self.side.curve_right().opposite(),
             },
         }
     }
@@ -48,32 +55,34 @@ fn rail_builder(
 ) {
     let rail_graph = rail_graph.as_mut();
     for evt in click_event.iter() {
-        match evt.button {
-            MouseButton::Left => build_rail(
-                &mut commands,
-                &atlas_h,
-                rail_graph,
-                evt.coord,
-                evt.side,
-                RailType::Straight,
-            ),
-            MouseButton::Right => build_rail(
-                &mut commands,
-                &atlas_h,
-                rail_graph,
-                evt.coord,
-                evt.side,
-                RailType::CurvedRight,
-            ),
-            MouseButton::Middle => build_rail(
-                &mut commands,
-                &atlas_h,
-                rail_graph,
-                evt.coord,
-                evt.side,
-                RailType::CurvedLeft,
-            ),
-            _ => (),
+        if let Some(side) = evt.side {
+            match evt.button {
+                MouseButton::Left => build_rail(
+                    &mut commands,
+                    &atlas_h,
+                    rail_graph,
+                    evt.coord,
+                    side,
+                    RailType::Straight,
+                ),
+                MouseButton::Right => build_rail(
+                    &mut commands,
+                    &atlas_h,
+                    rail_graph,
+                    evt.coord,
+                    side,
+                    RailType::CurvedRight,
+                ),
+                MouseButton::Middle => build_rail(
+                    &mut commands,
+                    &atlas_h,
+                    rail_graph,
+                    evt.coord,
+                    side,
+                    RailType::CurvedLeft,
+                ),
+                _ => (),
+            }
         }
     }
 }
@@ -151,7 +160,13 @@ fn load_texture_atlas(
     mut texture_atlas: ResMut<Assets<TextureAtlas>>,
 ) {
     let image = asset_server.load("RailAtlas.png");
-    let atlas = TextureAtlas::from_grid(image, Vec2::new(TILE_SIZE, TILE_SIZE), 1, 2);
+    let atlas = TextureAtlas::from_grid_with_padding(
+        image,
+        Vec2::new(TILE_SIZE, TILE_SIZE),
+        1,
+        2,
+        Vec2::splat(1.0),
+    );
     let atlas_handle = texture_atlas.add(atlas);
     commands.insert_resource(RailAtlas(atlas_handle));
 }

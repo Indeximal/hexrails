@@ -19,67 +19,56 @@ impl Plugin for TileMapPlugin {
 
 pub struct TileClickEvent {
     pub coord: TileCoordinate,
-    pub side: TileSide,
+    pub side: Option<TileSide>,
     pub button: MouseButton,
 }
 
+/// These are the six direction of the hexagonal grid. The value of each direction
+/// are equivalent to sixths of a counterclockwise turn starting at the positive x direction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum TileSide {
-    Center,
-    East,
-    West,
-    NorthEast,
-    NorthWest,
-    SouthEast,
-    SouthWest,
-}
+pub struct TileSide(u8);
 
 impl TileSide {
-    pub fn from_world_pos(world_pos: Vec2) -> TileSide {
+    pub const EAST: TileSide = TileSide(0);
+    pub const NORTH_EAST: TileSide = TileSide(1);
+    pub const NORTH_WEST: TileSide = TileSide(2);
+    pub const WEST: TileSide = TileSide(3);
+    pub const SOUTH_WEST: TileSide = TileSide(4);
+    pub const SOUTH_EAST: TileSide = TileSide(5);
+
+    // Todo: make this generic over more number types
+    pub fn from_sixth_turns(turns: i8) -> TileSide {
+        TileSide((turns % 6) as u8)
+    }
+
+    pub fn from_world_pos(world_pos: Vec2) -> Option<TileSide> {
         let tc = TileCoordinate::from(world_pos);
         let tc_center = Vec2::from(tc);
         let diff = world_pos - tc_center;
         if diff.length_squared() <= (TILE_SCALE / 2.) * (TILE_SCALE / 2.) * 0.1 {
-            return TileSide::Center;
+            return None;
         }
-        let angle = diff.angle_between(Vec2::X);
-        if angle.abs() <= PI / 6. {
-            TileSide::East
-        } else if angle.abs() >= PI * 5. / 6. {
-            TileSide::West
-        } else if angle <= -PI / 2. {
-            TileSide::NorthWest
-        } else if angle >= PI / 2. {
-            TileSide::SouthWest
-        } else if angle >= 0. {
-            TileSide::SouthEast
-        } else {
-            TileSide::NorthEast
-        }
+        // angle_between gives a clockwise angle from -PI to PI
+        let angle = -diff.angle_between(Vec2::X);
+        Some(TileSide::from_sixth_turns(
+            ((angle + 2. * PI) / (PI / 3.)).round() as i8,
+        ))
     }
 
     pub fn to_angle(&self) -> f32 {
-        match self {
-            TileSide::Center => 0.,
-            TileSide::East => 0.,
-            TileSide::NorthEast => PI * 1. / 3.,
-            TileSide::NorthWest => PI * 2. / 3.,
-            TileSide::West => PI,
-            TileSide::SouthWest => PI * 4. / 3.,
-            TileSide::SouthEast => PI * 5. / 3.,
-        }
+        self.0 as f32 * PI / 3.
     }
 
     pub fn opposite(&self) -> TileSide {
-        match self {
-            TileSide::Center => TileSide::Center,
-            TileSide::East => TileSide::West,
-            TileSide::NorthEast => TileSide::SouthWest,
-            TileSide::NorthWest => TileSide::SouthEast,
-            TileSide::West => TileSide::East,
-            TileSide::SouthWest => TileSide::NorthEast,
-            TileSide::SouthEast => TileSide::NorthWest,
-        }
+        TileSide::from_sixth_turns(self.0 as i8 + 3)
+    }
+
+    pub fn curve_right(&self) -> TileSide {
+        TileSide::from_sixth_turns(self.0 as i8 + 2)
+    }
+
+    pub fn curve_left(&self) -> TileSide {
+        TileSide::from_sixth_turns(self.0 as i8 + 4)
     }
 }
 
@@ -98,13 +87,13 @@ pub struct TileFace {
 impl TileCoordinate {
     pub fn neighbor(&self, side: TileSide) -> TileCoordinate {
         match side {
-            TileSide::Center => TileCoordinate((self.0 .0, self.0 .1)),
-            TileSide::East => TileCoordinate((self.0 .0 + 1, self.0 .1)),
-            TileSide::West => TileCoordinate((self.0 .0 - 1, self.0 .1)),
-            TileSide::NorthEast => TileCoordinate((self.0 .0, self.0 .1 + 1)),
-            TileSide::NorthWest => TileCoordinate((self.0 .0 - 1, self.0 .1 + 1)),
-            TileSide::SouthEast => TileCoordinate((self.0 .0 + 1, self.0 .1 - 1)),
-            TileSide::SouthWest => TileCoordinate((self.0 .0, self.0 .1 - 1)),
+            TileSide::EAST => TileCoordinate((self.0 .0 + 1, self.0 .1)),
+            TileSide::WEST => TileCoordinate((self.0 .0 - 1, self.0 .1)),
+            TileSide::NORTH_EAST => TileCoordinate((self.0 .0, self.0 .1 + 1)),
+            TileSide::NORTH_WEST => TileCoordinate((self.0 .0 - 1, self.0 .1 + 1)),
+            TileSide::SOUTH_EAST => TileCoordinate((self.0 .0 + 1, self.0 .1 - 1)),
+            TileSide::SOUTH_WEST => TileCoordinate((self.0 .0, self.0 .1 - 1)),
+            _ => panic!("Tile side not in range 0..6"),
         }
     }
 }
