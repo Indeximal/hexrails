@@ -33,7 +33,7 @@ fn spawn_tiles(mut commands: Commands, atlas_h: Res<TerrainAtlas>) {
                     (0, 0) => TerrainType::Red,
                     (_, _) => TerrainType::Green,
                 },
-                TileCoordinate((x, y)),
+                TileCoordinate(x, y),
             );
         }
     }

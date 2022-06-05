@@ -104,7 +104,7 @@ fn build_rail(
     let edge = rail_graph.graph.add_edge(start_face, end_face, ());
     // if the edge didn't previously exist:
     if edge.is_none() {
-        info!("{:?} -> {:?}", start_face.tile.0, end_face.tile.0);
+        info!("{:?} -> {:?}", start_face.tile, end_face.tile);
         spawn_rail(commands, atlas, position, start_side, rail_type);
     }
 }

@@ -73,7 +73,7 @@ impl TileSide {
 }
 
 #[derive(Component, Debug, Clone, Copy, Inspectable, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TileCoordinate(pub (i32, i32));
+pub struct TileCoordinate(pub i32, pub i32);
 
 /// This is the face of the tile at coordinate `tile` facing *from* `side`.
 /// e.g (0, 0) EAST is the right part of the origin tile, but when used as an
@@ -87,12 +87,12 @@ pub struct TileFace {
 impl TileCoordinate {
     pub fn neighbor(&self, side: TileSide) -> TileCoordinate {
         match side {
-            TileSide::EAST => TileCoordinate((self.0 .0 + 1, self.0 .1)),
-            TileSide::WEST => TileCoordinate((self.0 .0 - 1, self.0 .1)),
-            TileSide::NORTH_EAST => TileCoordinate((self.0 .0, self.0 .1 + 1)),
-            TileSide::NORTH_WEST => TileCoordinate((self.0 .0 - 1, self.0 .1 + 1)),
-            TileSide::SOUTH_EAST => TileCoordinate((self.0 .0 + 1, self.0 .1 - 1)),
-            TileSide::SOUTH_WEST => TileCoordinate((self.0 .0, self.0 .1 - 1)),
+            TileSide::EAST => TileCoordinate(self.0 + 1, self.1),
+            TileSide::WEST => TileCoordinate(self.0 - 1, self.1),
+            TileSide::NORTH_EAST => TileCoordinate(self.0, self.1 + 1),
+            TileSide::NORTH_WEST => TileCoordinate(self.0 - 1, self.1 + 1),
+            TileSide::SOUTH_EAST => TileCoordinate(self.0 + 1, self.1 - 1),
+            TileSide::SOUTH_WEST => TileCoordinate(self.0, self.1 - 1),
             _ => panic!("Tile side not in range 0..6"),
         }
     }
@@ -100,7 +100,7 @@ impl TileCoordinate {
 
 impl From<TileCoordinate> for Vec2 {
     fn from(tc: TileCoordinate) -> Self {
-        let (x, y) = tc.0;
+        let (x, y) = (tc.0, tc.1);
         let yy = y as f32 * TILE_SCALE;
         Vec2::new(
             x as f32 * TILE_SCALE * SQRT3_HALF + SQRT3_HALF / 2. * yy,
@@ -114,7 +114,7 @@ impl From<Vec2> for TileCoordinate {
     fn from(world_pos: Vec2) -> Self {
         let yy = world_pos.y / 0.75;
         let x = (world_pos.x - SQRT3_HALF / 2. * yy) / (TILE_SCALE * SQRT3_HALF);
-        TileCoordinate((x.round() as i32, (yy / TILE_SCALE).round() as i32))
+        TileCoordinate(x.round() as i32, (yy / TILE_SCALE).round() as i32)
     }
 }
 
