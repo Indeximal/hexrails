@@ -1,7 +1,7 @@
 use crate::tilemap::*;
 use bevy::prelude::*;
 
-const Z_LAYER_TERRAIN: f32 = 100.;
+const Z_LAYER_TERRAIN: f32 = 0.1;
 
 pub struct TerrainPlugin;
 
@@ -53,8 +53,6 @@ fn spawn_terrain_tile(
     };
     let mut sprite = TextureAtlasSprite::new(index);
     sprite.custom_size = Some(Vec2::splat(TILE_SCALE));
-    // Temporary to see the debug lines
-    sprite.color = Color::rgba(1., 1., 1., 0.7);
 
     commands
         .spawn_bundle(SpriteSheetBundle {
@@ -66,7 +64,7 @@ fn spawn_terrain_tile(
             },
             ..Default::default()
         })
-        .insert(Name::new(format!("Tile {:?}", position.0)))
+        .insert(Name::new(format!("Tile {}", position)))
         .insert(Tile {})
         .insert(position);
 }

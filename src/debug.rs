@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use bevy::prelude::*;
 use bevy_inspector_egui::{RegisterInspectable, WorldInspectorPlugin};
 use bevy_prototype_debug_lines::{DebugLines, DebugLinesPlugin};
@@ -22,14 +24,15 @@ impl Plugin for DebugPlugin {
 
 fn face_position(face: TileFace) -> Vec3 {
     let origin = face.tile.into_world_pos();
-    let angle = face.side.to_angle();
-    let offset = Vec2::new(angle.cos(), angle.sin()) * TILE_SCALE / 2. * 0.6;
-    (origin + offset).extend(999.)
+    // Add a angle offset for better visibility
+    let angle = face.side.to_angle() + PI / 8.;
+    let offset = Vec2::new(angle.cos(), angle.sin()) * TILE_SCALE / 2. * 0.8;
+    (origin + offset).extend(999.0)
 }
 
 fn draw_rail_graph(graph: Res<RailGraph>, mut lines: ResMut<DebugLines>) {
     for (from, to, _) in graph.graph.all_edges() {
         //println!("{:?}->{:?}", from.tile, to.tile);
-        lines.line_colored(face_position(from), face_position(to), 0., Color::BLACK);
+        lines.line_colored(face_position(from), face_position(to), 0., Color::BLUE);
     }
 }

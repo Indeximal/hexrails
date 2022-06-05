@@ -1,3 +1,4 @@
+use core::fmt;
 use std::f32::consts::PI;
 
 use bevy::{input::mouse::MouseButtonInput, prelude::*};
@@ -82,6 +83,29 @@ pub struct TileCoordinate(pub i32, pub i32);
 pub struct TileFace {
     pub tile: TileCoordinate,
     pub side: TileSide,
+}
+
+impl TileFace {
+    pub fn opposite(&self) -> TileFace {
+        TileFace {
+            tile: self.tile.neighbor(self.side),
+            side: self.side.opposite(),
+        }
+    }
+}
+
+impl fmt::Display for TileCoordinate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({}, {})", self.0, self.1)
+        // write!(
+        //     f,
+        //     "{} {}, {} {}",
+        //     self.0.abs(),
+        //     if self.0 >= 0 { "E" } else { "W" },
+        //     self.1.abs(),
+        //     if self.1 >= 0 { "NE" } else { "SW" }
+        // )
+    }
 }
 
 impl TileCoordinate {

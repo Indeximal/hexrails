@@ -2,7 +2,7 @@ use crate::tilemap::*;
 use bevy::prelude::*;
 use petgraph::graphmap::DiGraphMap;
 
-const Z_LAYER_RAILS: f32 = 200.;
+const Z_LAYER_RAILS: f32 = 0.2;
 
 pub struct RailRoadPlugin;
 
@@ -101,10 +101,13 @@ fn build_rail(
     };
     let end_face = start_face.next_face_with(rail_type);
 
-    let edge = rail_graph.graph.add_edge(start_face, end_face, ());
-    // if the edge didn't previously exist:
-    if edge.is_none() {
-        info!("{:?} -> {:?}", start_face.tile, end_face.tile);
+    let edge1 = rail_graph.graph.add_edge(start_face, end_face, ());
+    let edge2 = rail_graph
+        .graph
+        .add_edge(end_face.opposite(), start_face.opposite(), ());
+    // if neither edge previously existed:
+    if edge1.is_none() && edge2.is_none() {
+        info!("Rail built @{} -> {}", start_face.tile, end_face.tile);
         spawn_rail(commands, atlas, position, start_side, rail_type);
     }
 }
@@ -141,7 +144,7 @@ fn spawn_rail(
             },
             ..Default::default()
         })
-        .insert(Name::new(format!("Rail {:?}", position.0)))
+        .insert(Name::new(format!("Rail {}", position)))
         .insert(RailTile {})
         .insert(position);
 }
