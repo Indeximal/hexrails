@@ -1757,7 +1757,9 @@ dependencies = [
  "bevy",
  "bevy-inspector-egui",
  "bevy_prototype_debug_lines",
- "petgraph",
+ "petgraph 0.6.2 (git+https://github.com/Indeximal/petgraph-contrib-fork)",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2161,7 +2163,7 @@ dependencies = [
  "indexmap",
  "log",
  "num-traits",
- "petgraph",
+ "petgraph 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "pp-rs",
  "rustc-hash",
  "spirv",
@@ -2571,6 +2573,17 @@ checksum = "e6d5014253a1331579ce62aa67443b4a658c5e7dd03d4bc6d302b94474888143"
 dependencies = [
  "fixedbitset",
  "indexmap",
+]
+
+[[package]]
+name = "petgraph"
+version = "0.6.2"
+source = "git+https://github.com/Indeximal/petgraph-contrib-fork#06f2530ab0aff2b17c2fc6073d410eb6894f2ae0"
+dependencies = [
+ "fixedbitset",
+ "indexmap",
+ "serde",
+ "serde_derive",
 ]
 
 [[package]]

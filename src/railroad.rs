@@ -1,6 +1,7 @@
 use crate::tilemap::*;
 use bevy::prelude::*;
 use petgraph::graphmap::DiGraphMap;
+use serde::{Deserialize, Serialize};
 
 const Z_LAYER_RAILS: f32 = 0.2;
 
@@ -14,6 +15,7 @@ impl Plugin for RailRoadPlugin {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct RailGraph {
     pub graph: DiGraphMap<TileFace, ()>,
 }
