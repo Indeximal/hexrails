@@ -10,7 +10,6 @@ pub struct RailRoadPlugin;
 impl Plugin for RailRoadPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system_to_stage(StartupStage::PreStartup, load_texture_atlas)
-            .add_startup_system(load_rail_graph)
             .add_system(rail_builder);
     }
 }
@@ -152,12 +151,6 @@ fn spawn_rail(
 }
 
 struct RailAtlas(Handle<TextureAtlas>);
-
-fn load_rail_graph(mut commands: Commands) {
-    commands.insert_resource(RailGraph {
-        graph: DiGraphMap::new(),
-    })
-}
 
 fn load_texture_atlas(
     mut commands: Commands,
