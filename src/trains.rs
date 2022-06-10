@@ -1,7 +1,10 @@
 use bevy::{core::FixedTimestep, prelude::*};
 use bevy_inspector_egui::Inspectable;
 
-use crate::tilemap::{TileCoordinate, TileFace, TileSide, TILE_SCALE, TILE_SIZE};
+use crate::{
+    railroad::RailGraph,
+    tilemap::{TileCoordinate, TileFace, TileSide, TILE_SCALE, TILE_SIZE},
+};
 
 const Z_LAYER_TRAINS: f32 = 0.3;
 
@@ -9,8 +12,9 @@ pub struct TrainPlugin;
 
 impl Plugin for TrainPlugin {
     fn build(&self, app: &mut App) {
+        // Todo: don't rely on stages
         app.add_startup_system_to_stage(StartupStage::PreStartup, load_texture_atlas)
-            .add_startup_system(create_test_train)
+            .add_startup_system_to_stage(StartupStage::PostStartup, create_test_train)
             .add_system(move_trains)
             // Todo: move to iyes_loopless instead
             .add_system_set(
@@ -84,31 +88,40 @@ fn move_train_unit(output: &mut Transform, start: TileFace, end: TileFace, t: f3
     output.rotation = Quat::from_rotation_z(angle);
 }
 
-fn create_test_path() -> Vec<TileFace> {
-    let mut path = Vec::new();
-    for i in -7..=0 {
-        path.push(TileFace {
-            tile: TileCoordinate(i, 0),
-            side: TileSide::WEST,
-        })
-    }
-    for i in 1..=7 {
-        path.push(TileFace {
-            tile: TileCoordinate(0, i),
-            side: TileSide::SOUTH_WEST,
-        })
-    }
-    path
+fn create_test_path(rail_graph: &RailGraph) -> Vec<TileFace> {
+    let start = TileFace {
+        tile: TileCoordinate(-7, 0),
+        side: TileSide::WEST,
+    };
+    let end = TileFace {
+        tile: TileCoordinate(0, 7),
+        side: TileSide::SOUTH_WEST,
+    };
+
+    let result = petgraph::algo::astar(
+        &rail_graph.graph,
+        start,
+        |v| v == end,
+        |_| 1.0,
+        |e| {
+            end.tile
+                .into_world_pos()
+                .distance_squared(e.tile.into_world_pos())
+        },
+    );
+
+    result.expect("No path found!").1
 }
 
 /// System to spawn a train for now
-fn create_test_train(mut commands: Commands, atlas: Res<TrainAtlas>) {
+fn create_test_train(mut commands: Commands, atlas: Res<TrainAtlas>, rail_graph: Res<RailGraph>) {
+    let graph = rail_graph.as_ref();
     commands
         .spawn()
         .insert_bundle(TransformBundle::default())
         .insert(Name::new("Testing Train"))
         .insert(TrainHead {
-            path: create_test_path(),
+            path: create_test_path(graph),
             path_progress: 5.0,
             velocity: 0.05,
         })

@@ -8,6 +8,8 @@ pub struct TerrainPlugin;
 impl Plugin for TerrainPlugin {
     fn build(&self, app: &mut App) {
         // Todo: this need to be revamped with better ordering
+        // but simply setting .before /.after doesn't work?
+        // Maybe because the commands are only run after the stage
         app.add_startup_system_to_stage(StartupStage::PreStartup, load_texture_atlas)
             .add_startup_system_to_stage(StartupStage::PreStartup, spawn_terrain_root)
             .add_startup_system(spawn_tiles);
