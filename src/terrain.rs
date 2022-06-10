@@ -7,10 +7,15 @@ pub struct TerrainPlugin;
 
 impl Plugin for TerrainPlugin {
     fn build(&self, app: &mut App) {
+        // Todo: this need to be revamped with better ordering
         app.add_startup_system_to_stage(StartupStage::PreStartup, load_texture_atlas)
+            .add_startup_system_to_stage(StartupStage::PreStartup, spawn_terrain_root)
             .add_startup_system(spawn_tiles);
     }
 }
+
+#[derive(Component)]
+struct TerrainRoot;
 
 enum TerrainType {
     Green,
@@ -20,7 +25,21 @@ enum TerrainType {
 #[derive(Component)]
 struct Tile {}
 
-fn spawn_tiles(mut commands: Commands, atlas_h: Res<TerrainAtlas>) {
+/// This system spawns the root node for all the terrain sprites, useful mostly for inspecting.
+fn spawn_terrain_root(mut commands: Commands) {
+    commands
+        .spawn_bundle(TransformBundle::default())
+        .insert(TerrainRoot)
+        .insert(Name::new("Terrain"));
+}
+
+/// system to spawn some tiles in a hexagon
+fn spawn_tiles(
+    mut commands: Commands,
+    atlas_h: Res<TerrainAtlas>,
+    root_query: Query<Entity, With<TerrainRoot>>,
+) {
+    let root_entity = root_query.single();
     const RADIUS: i32 = 3;
     for y in -RADIUS..=RADIUS {
         for x in if y >= 0 {
@@ -31,6 +50,7 @@ fn spawn_tiles(mut commands: Commands, atlas_h: Res<TerrainAtlas>) {
             spawn_terrain_tile(
                 &mut commands,
                 &atlas_h,
+                root_entity,
                 match (x, y) {
                     (0, 0) => TerrainType::Red,
                     (_, _) => TerrainType::Green,
@@ -41,9 +61,11 @@ fn spawn_tiles(mut commands: Commands, atlas_h: Res<TerrainAtlas>) {
     }
 }
 
+/// helper function to spawn a tile
 fn spawn_terrain_tile(
     commands: &mut Commands,
     atlas: &Res<TerrainAtlas>,
+    root_entity: Entity,
     terrain_type: TerrainType,
     position: TileCoordinate,
 ) {
@@ -54,7 +76,7 @@ fn spawn_terrain_tile(
     let mut sprite = TextureAtlasSprite::new(index);
     sprite.custom_size = Some(Vec2::splat(TILE_SCALE));
 
-    commands
+    let child = commands
         .spawn_bundle(SpriteSheetBundle {
             sprite: sprite,
             texture_atlas: atlas.0.clone(),
@@ -66,11 +88,15 @@ fn spawn_terrain_tile(
         })
         .insert(Name::new(format!("Tile {}", position)))
         .insert(Tile {})
-        .insert(position);
+        .insert(position)
+        .id();
+
+    commands.entity(root_entity).add_child(child);
 }
 
 struct TerrainAtlas(Handle<TextureAtlas>);
 
+/// System to load the sprite sheet
 fn load_texture_atlas(
     mut commands: Commands,
     asset_server: Res<AssetServer>,

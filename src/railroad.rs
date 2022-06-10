@@ -1,5 +1,6 @@
 use crate::tilemap::*;
 use bevy::prelude::*;
+use bevy_inspector_egui::bevy_egui::EguiContext;
 use petgraph::graphmap::DiGraphMap;
 use serde::{Deserialize, Serialize};
 
@@ -10,9 +11,13 @@ pub struct RailRoadPlugin;
 impl Plugin for RailRoadPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system_to_stage(StartupStage::PreStartup, load_texture_atlas)
+            .add_startup_system(spawn_rail_root)
             .add_system(rail_builder);
     }
 }
+
+#[derive(Component)]
+struct RailNetworkRoot;
 
 #[derive(Serialize, Deserialize)]
 pub struct RailGraph {
@@ -48,19 +53,37 @@ impl TileFace {
     }
 }
 
+/// This system spawns the root node for all the rail sprites, useful mostly for inspecting.
+fn spawn_rail_root(mut commands: Commands) {
+    commands
+        .spawn_bundle(TransformBundle::default())
+        .insert(RailNetworkRoot)
+        .insert(Name::new("Rail Network"));
+}
+
+/// This system tries to build rails both in the graph on with sprites when the mouse is clicked.
 fn rail_builder(
     mut commands: Commands,
     atlas_h: Res<RailAtlas>,
     mut click_event: EventReader<TileClickEvent>,
     mut rail_graph: ResMut<RailGraph>,
+    root_query: Query<Entity, With<RailNetworkRoot>>,
+    mut egui_context: ResMut<EguiContext>,
 ) {
+    // Skip if the mouse is above a inspector window
+    if egui_context.ctx_mut().wants_pointer_input() {
+        return;
+    }
+
     let rail_graph = rail_graph.as_mut();
+    let root_entity = root_query.single();
     for evt in click_event.iter() {
         if let Some(side) = evt.side {
             match evt.button {
                 MouseButton::Left => build_rail(
                     &mut commands,
                     &atlas_h,
+                    root_entity,
                     rail_graph,
                     evt.coord,
                     side,
@@ -69,6 +92,7 @@ fn rail_builder(
                 MouseButton::Right => build_rail(
                     &mut commands,
                     &atlas_h,
+                    root_entity,
                     rail_graph,
                     evt.coord,
                     side,
@@ -77,6 +101,7 @@ fn rail_builder(
                 MouseButton::Middle => build_rail(
                     &mut commands,
                     &atlas_h,
+                    root_entity,
                     rail_graph,
                     evt.coord,
                     side,
@@ -88,9 +113,11 @@ fn rail_builder(
     }
 }
 
+/// This helper function tries to build a single rail if it doesn't already exist
 fn build_rail(
     commands: &mut Commands,
     atlas: &Res<RailAtlas>,
+    root_entity: Entity,
     rail_graph: &mut RailGraph,
     position: TileCoordinate,
     start_side: TileSide,
@@ -109,13 +136,22 @@ fn build_rail(
     // if neither edge previously existed:
     if edge1.is_none() && edge2.is_none() {
         info!("Rail built @{} -> {}", start_face.tile, end_face.tile);
-        spawn_rail(commands, atlas, position, start_side, rail_type);
+        spawn_rail(
+            commands,
+            atlas,
+            root_entity,
+            position,
+            start_side,
+            rail_type,
+        );
     }
 }
 
+/// This helper function spawns a rail sprite
 fn spawn_rail(
     commands: &mut Commands,
     atlas: &Res<RailAtlas>,
+    root_entity: Entity,
     position: TileCoordinate,
     start_side: TileSide,
     rail_type: RailType,
@@ -134,7 +170,7 @@ fn spawn_rail(
     sprite.custom_size = Some(Vec2::splat(TILE_SCALE));
     sprite.flip_y = flipped;
 
-    commands
+    let child = commands
         .spawn_bundle(SpriteSheetBundle {
             sprite: sprite,
             texture_atlas: atlas.0.clone(),
@@ -147,11 +183,15 @@ fn spawn_rail(
         })
         .insert(Name::new(format!("Rail {}", position)))
         .insert(RailTile {})
-        .insert(position);
+        .insert(position)
+        .id();
+
+    commands.entity(root_entity).add_child(child);
 }
 
 struct RailAtlas(Handle<TextureAtlas>);
 
+/// This system loads the sprite atlas for the rails
 fn load_texture_atlas(
     mut commands: Commands,
     asset_server: Res<AssetServer>,

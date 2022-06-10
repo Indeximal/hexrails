@@ -1,4 +1,5 @@
 use bevy::{input::mouse::MouseWheel, prelude::*, render::camera::ScalingMode};
+use bevy_inspector_egui::bevy_egui::EguiContext;
 
 use crate::ASPECT_RATIO;
 
@@ -159,7 +160,13 @@ fn zoom_system(
     mut whl: EventReader<MouseWheel>,
     mut cam: Query<(&FlyCamera2d, &mut Transform, &mut OrthographicProjection), With<Camera>>,
     windows: Res<Windows>,
+    mut egui_context: ResMut<EguiContext>,
 ) {
+    // Skip zooming if the mouse is above a inspector window
+    if egui_context.ctx_mut().wants_pointer_input() {
+        return;
+    }
+
     let delta_zoom: f32 = whl.iter().map(|e| e.y).sum();
     if delta_zoom == 0. {
         return;
