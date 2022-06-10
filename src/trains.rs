@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{core::FixedTimestep, prelude::*};
 use bevy_inspector_egui::Inspectable;
 
 use crate::tilemap::{TileCoordinate, TileFace, TileSide, TILE_SCALE, TILE_SIZE};
@@ -10,13 +10,22 @@ pub struct TrainPlugin;
 impl Plugin for TrainPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system_to_stage(StartupStage::PreStartup, load_texture_atlas)
-            .add_startup_system(create_test_train);
+            .add_startup_system(create_test_train)
+            .add_system(move_trains)
+            // Todo: move to iyes_loopless instead
+            .add_system_set(
+                SystemSet::new()
+                    .with_run_criteria(FixedTimestep::steps_per_second(20.))
+                    .with_system(drive_trains_tick),
+            );
     }
 }
 
 #[derive(Component, Inspectable)]
 pub struct TrainHead {
+    /// From 0 at the start to len at the destination
     pub path: Vec<TileFace>,
+    /// A fractional index into path
     pub path_progress: f32,
     pub velocity: f32,
 }
@@ -27,12 +36,66 @@ pub struct TrainUnit {
     pub position: u32,
 }
 
+fn drive_trains_tick(mut trains: Query<&mut TrainHead>) {
+    for mut train in trains.iter_mut() {
+        train.path_progress += train.velocity;
+        train.path_progress = train.path_progress.clamp(0., (train.path.len() - 1) as f32);
+    }
+}
+
+/// System to update the tranform of the train wagons.
+/// Precondition: progress <= path.len() - 1
+fn move_trains(
+    mut train_wagons: Query<(&Parent, &mut Transform, &TrainUnit)>,
+    trains: Query<&TrainHead>,
+) {
+    for (parent, mut transform, unit) in train_wagons.iter_mut() {
+        let head = trains
+            .get(parent.0)
+            .expect("Train Unit did not have a Train Head as a Parent");
+
+        let progress = head.path_progress - unit.position as f32;
+        if progress < 1. {
+            error!("Train Unit is not on path!");
+            continue;
+        }
+        let render_progress = progress - 0.5;
+        let start = head.path[render_progress.ceil() as usize - 1];
+        let end = head.path[render_progress.ceil() as usize];
+        move_train_unit(transform.as_mut(), start, end, render_progress.fract())
+    }
+}
+
+fn face_position(face: TileFace) -> Vec2 {
+    let origin = face.tile.into_world_pos();
+    let angle = face.side.to_angle();
+    let offset = Vec2::new(angle.cos(), angle.sin()) * TILE_SCALE / 2.;
+    origin + offset
+}
+
+fn move_train_unit(output: &mut Transform, start: TileFace, end: TileFace, t: f32) {
+    let start_pos = face_position(start);
+    let end_pos = face_position(end);
+    let pos = start_pos * (1. - t) + end_pos * t;
+    let start_angle = start.side.to_angle();
+    let end_angle = end.side.to_angle();
+    let angle = start_angle * (1. - t) + end_angle * t;
+    output.translation = pos.extend(Z_LAYER_TRAINS);
+    output.rotation = Quat::from_rotation_z(angle);
+}
+
 fn create_test_path() -> Vec<TileFace> {
     let mut path = Vec::new();
-    for i in -5..=5 {
+    for i in -7..=0 {
         path.push(TileFace {
             tile: TileCoordinate(i, 0),
-            side: TileSide::EAST,
+            side: TileSide::WEST,
+        })
+    }
+    for i in 1..=7 {
+        path.push(TileFace {
+            tile: TileCoordinate(0, i),
+            side: TileSide::SOUTH_WEST,
         })
     }
     path
@@ -47,11 +110,11 @@ fn create_test_train(mut commands: Commands, atlas: Res<TrainAtlas>) {
         .insert(TrainHead {
             path: create_test_path(),
             path_progress: 5.0,
-            velocity: 0.1,
+            velocity: 0.05,
         })
         .with_children(|builder| {
-            for i in 0..5 {
-                let mut sprite = TextureAtlasSprite::new(if i == 0 { 0 } else { 1 });
+            for i in 0..4 {
+                let mut sprite = TextureAtlasSprite::new(if i == 0 { 1 } else { 0 });
                 sprite.custom_size = Some(Vec2::splat(TILE_SCALE));
                 builder
                     .spawn_bundle(SpriteSheetBundle {
