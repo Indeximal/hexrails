@@ -5,6 +5,7 @@ use railroad::RailRoadPlugin;
 use savegame::LoadSavePlugin;
 use terrain::TerrainPlugin;
 use tilemap::TileMapPlugin;
+use trains::TrainPlugin;
 
 mod camera;
 mod debug;
@@ -12,6 +13,7 @@ mod railroad;
 mod savegame;
 mod terrain;
 mod tilemap;
+mod trains;
 
 pub const BG_COLOR: Color = Color::rgb(0.7, 0.7, 0.7);
 pub const ASPECT_RATIO: f32 = 16.0 / 9.0;
@@ -36,6 +38,7 @@ fn main() {
         .add_plugin(RailRoadPlugin)
         .add_plugin(MovingCameraPlugin)
         .add_plugin(LoadSavePlugin)
+        .add_plugin(TrainPlugin)
         .run();
 }
 

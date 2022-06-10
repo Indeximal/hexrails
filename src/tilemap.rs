@@ -27,7 +27,9 @@ pub struct TileClickEvent {
 
 /// These are the six direction of the hexagonal grid. The value of each direction
 /// are equivalent to sixths of a counterclockwise turn starting at the positive x direction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Inspectable,
+)]
 pub struct TileSide(u8);
 
 impl TileSide {
@@ -93,7 +95,9 @@ pub struct TileCoordinate(pub i32, pub i32);
 /// This is the face of the tile at coordinate `tile` facing *from* `side`.
 /// e.g (0, 0) EAST is the right part of the origin tile, but when used as an
 /// coordinate for a rail this rail is going east to west (or south/north-west).
-#[derive(Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Serialize, Deserialize, Inspectable,
+)]
 pub struct TileFace {
     pub tile: TileCoordinate,
     pub side: TileSide,
@@ -104,6 +108,16 @@ impl TileFace {
         TileFace {
             tile: self.tile.neighbor(self.side),
             side: self.side.opposite(),
+        }
+    }
+}
+
+/// This is needed for Egui Inspector
+impl Default for TileFace {
+    fn default() -> Self {
+        Self {
+            tile: TileCoordinate(0, 0),
+            side: TileSide::EAST,
         }
     }
 }
