@@ -1,7 +1,7 @@
 use core::fmt;
 use std::f32::consts::PI;
 
-use bevy::{input::mouse::MouseButtonInput, prelude::*};
+use bevy::prelude::*;
 use bevy_inspector_egui::{bevy_egui::EguiContext, Inspectable};
 use serde::{Deserialize, Serialize};
 
@@ -193,7 +193,7 @@ impl TileCoordinate {
 }
 
 fn mouse_button_events(
-    mut mousebtn_evr: EventReader<MouseButtonInput>,
+    mousebtn: Res<Input<MouseButton>>,
     mut click_event: EventWriter<TileClickEvent>,
     windows: Res<Windows>,
     cam: Query<(&Transform, &OrthographicProjection), With<FlyCamera2d>>,
@@ -212,8 +212,6 @@ fn mouse_button_events(
         return;
     }
 
-    use bevy::input::ElementState;
-
     let (pos, cam) = cam.single();
     let window = match windows.get_primary() {
         Some(w) => w,
@@ -228,14 +226,11 @@ fn mouse_button_events(
         }
     };
 
-    for ev in mousebtn_evr.iter() {
-        match ev.state {
-            ElementState::Pressed => {}
-            ElementState::Released => click_event.send(TileClickEvent {
-                coord: TileCoordinate::from_world_pos(world_pos),
-                side: TileSide::from_world_pos(world_pos),
-                button: ev.button,
-            }),
-        }
+    if mousebtn.just_pressed(MouseButton::Left) {
+        click_event.send(TileClickEvent {
+            coord: TileCoordinate::from_world_pos(world_pos),
+            side: TileSide::from_world_pos(world_pos),
+            button: MouseButton::Left,
+        })
     }
 }
