@@ -71,7 +71,7 @@ fn spawn_rail_root(mut commands: Commands) {
         .insert(Name::new("Rail Network"));
 }
 
-/// This system tries to build rails both in the graph on with sprites when the mouse is clicked.
+/// This system tries to build rails both in the graph and with sprites when the mouse is clicked.
 fn rail_builder(
     mut commands: Commands,
     atlas_h: Res<RailAtlas>,
