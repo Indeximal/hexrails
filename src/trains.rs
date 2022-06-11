@@ -6,7 +6,7 @@ use petgraph::EdgeDirection;
 
 use crate::{
     railroad::RailGraph,
-    tilemap::{TileClickEvent, TileCoordinate, TileFace, TileSide, TILE_SCALE, TILE_SIZE},
+    tilemap::{TileClickEvent, TileFace, TILE_SCALE, TILE_SIZE},
     ui::InteractingState,
 };
 
@@ -16,10 +16,9 @@ pub struct TrainPlugin;
 
 impl Plugin for TrainPlugin {
     fn build(&self, app: &mut App) {
-        // Todo: don't rely on stages
+        // Todo: don't rely on stages. Even possible because of Commands dependencies?
         app.add_startup_system_to_stage(StartupStage::PreStartup, load_texture_atlas)
-            .add_startup_system_to_stage(StartupStage::PostStartup, create_test_train)
-            .add_system(position_train_units)
+            .add_system_to_stage(CoreStage::PostUpdate, position_train_units)
             // Todo: move to iyes_loopless instead
             .add_system_set(
                 SystemSet::new()
@@ -37,6 +36,7 @@ impl Plugin for TrainPlugin {
 #[derive(Component, Inspectable)]
 pub struct TrainHead {
     /// A fractional index into path, where the front of the train is.
+    /// Must obey `length + 1 < path_progress <= path.len() - 1` (todo: check)
     pub path_progress: f32,
     /// Current change of progress per tick. Should be non-negative
     pub velocity: f32,
@@ -131,6 +131,7 @@ fn train_builder(
             continue;
         }
 
+        let mut found_train = false;
         for (parent, children, mut train) in trains.iter_mut() {
             if let Some(new_index) = train.index_for_tile(face) {
                 insert_wagon(
@@ -143,14 +144,50 @@ fn train_builder(
                     new_index,
                 );
                 train.length += 1;
+                found_train = true;
                 break;
             }
+        }
+        if !found_train {
+            create_new_train(&mut commands, &atlas, face, &graph, trail_type);
         }
         // todo: remove limit for one click per frame, needed for borrow checker. (Why?)
         break;
     }
 }
 
+/// Creates a new train with a single wagon.
+/// Precondition: `face` is in the `rail_graph` and has a neighbor.
+fn create_new_train(
+    commands: &mut Commands,
+    atlas: &TrainAtlas,
+    face: TileFace,
+    rail_graph: &RailGraph,
+    wagon_type: TrainUnitType,
+) {
+    info!("Creating train at @{}", face.tile);
+
+    let next_face = rail_graph
+        .graph
+        .neighbors_directed(face, EdgeDirection::Outgoing)
+        .next()
+        .expect("Broke precondition: `face is in the graph and has a neighbor`!");
+
+    let new_wagon = spawn_wagon(commands, atlas, wagon_type, 0);
+    commands
+        .spawn()
+        .insert_bundle(TransformBundle::default())
+        .insert(Name::new("Train"))
+        .insert(TrainHead {
+            path: vec![face, next_face],
+            path_progress: 1.0,
+            velocity: 0.01, // todo: remove, this is temporary
+            length: 1,
+        })
+        .add_child(new_wagon);
+}
+
+/// Helper to insert a wagon into an existing train and move all other wagons accordingly
 fn insert_wagon(
     commands: &mut Commands,
     atlas: &TrainAtlas,
@@ -171,9 +208,20 @@ fn insert_wagon(
         }
     }
 
+    let new_wagon = spawn_wagon(commands, atlas, wagon_type, insert_index);
+    commands.entity(parent).add_child(new_wagon);
+}
+
+// Helper to spawn a wagon sprite
+fn spawn_wagon(
+    commands: &mut Commands,
+    atlas: &TrainAtlas,
+    wagon_type: TrainUnitType,
+    insert_index: u32,
+) -> Entity {
     let mut sprite = TextureAtlasSprite::new(wagon_type.into_texture_atlas_index());
     sprite.custom_size = Some(Vec2::splat(TILE_SCALE));
-    let new_wagon = commands
+    commands
         .spawn_bundle(SpriteSheetBundle {
             sprite: sprite,
             texture_atlas: atlas.0.clone(),
@@ -183,9 +231,8 @@ fn insert_wagon(
         .insert(TrainUnit {
             position: insert_index,
         })
-        .insert(Name::new("Wagon ..."))
-        .id();
-    commands.entity(parent).add_child(new_wagon);
+        .insert(Name::new("Wagon"))
+        .id()
 }
 
 /// Fixed timestep system to update the progress of the trains
@@ -208,11 +255,13 @@ fn tick_trains(mut trains: Query<&mut TrainHead>, graph_res: Res<RailGraph>) {
                 )
                 .any(|a| {
                     // Todo: implement steering
-                    // The remove operation is there to stop the path from growing continiously.
-                    // But it does use O(n) time, but since n should stay constant this way, this
-                    // is fine.
-                    train.path.remove(0);
-                    train.path_progress -= 1.;
+                    if train.path.len() >= train.length as usize + 5 {
+                        // The remove operation is there to stop the path from growing continiously.
+                        // But it does use O(n) time, but since n should stay constant this way, this
+                        // is fine.
+                        train.path.remove(0);
+                        train.path_progress -= 1.;
+                    }
                     train.path.push(a);
                     true // shortcircuit
                 });
@@ -265,62 +314,6 @@ fn move_train_unit(output: &mut Transform, start: TileFace, end: TileFace, t: f3
     let angle = start_angle + angle_diff * t;
     output.translation = pos.extend(Z_LAYER_TRAINS);
     output.rotation = Quat::from_rotation_z(angle);
-}
-
-/// Temporary helper to search for a hardcorded path
-fn create_test_path(rail_graph: &RailGraph) -> Vec<TileFace> {
-    let start = TileFace {
-        tile: TileCoordinate(-7, 0),
-        side: TileSide::WEST,
-    };
-    let end = TileFace {
-        tile: TileCoordinate(0, 7),
-        side: TileSide::SOUTH_WEST,
-    };
-
-    let result = petgraph::algo::astar(
-        &rail_graph.graph,
-        start,
-        |v| v == end,
-        |_| 1.0,
-        |e| {
-            end.tile
-                .into_world_pos()
-                .distance_squared(e.tile.into_world_pos())
-        },
-    );
-
-    result.expect("No path found!").1
-}
-
-/// Temporary system to spawn a train for now
-fn create_test_train(mut commands: Commands, atlas: Res<TrainAtlas>, rail_graph: Res<RailGraph>) {
-    let graph = rail_graph.as_ref();
-    commands
-        .spawn()
-        .insert_bundle(TransformBundle::default())
-        .insert(Name::new("Testing Train"))
-        .insert(TrainHead {
-            path: create_test_path(graph),
-            path_progress: 5.0,
-            velocity: 0.0,
-            length: 4,
-        })
-        .with_children(|builder| {
-            for i in 0..4 {
-                let mut sprite = TextureAtlasSprite::new(if i == 0 { 1 } else { 0 });
-                sprite.custom_size = Some(Vec2::splat(TILE_SCALE));
-                builder
-                    .spawn_bundle(SpriteSheetBundle {
-                        sprite: sprite,
-                        texture_atlas: atlas.0.clone(),
-                        transform: Transform::from_translation(Vec3::Z * Z_LAYER_TRAINS),
-                        ..Default::default()
-                    })
-                    .insert(TrainUnit { position: i })
-                    .insert(Name::new(format!("Wagon {}", i)));
-            }
-        });
 }
 
 struct TrainAtlas(Handle<TextureAtlas>);
