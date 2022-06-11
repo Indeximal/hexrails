@@ -27,7 +27,7 @@ pub struct RailGraph {
 #[derive(Component)]
 pub struct RailTile {}
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RailType {
     Straight,
     CurvedLeft,

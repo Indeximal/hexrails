@@ -6,6 +6,7 @@ use savegame::LoadSavePlugin;
 use terrain::TerrainPlugin;
 use tilemap::TileMapPlugin;
 use trains::TrainPlugin;
+use ui::UIOverlayPlugin;
 
 mod camera;
 mod debug;
@@ -14,6 +15,7 @@ mod savegame;
 mod terrain;
 mod tilemap;
 mod trains;
+mod ui;
 
 pub const BG_COLOR: Color = Color::rgb(0.7, 0.7, 0.7);
 pub const ASPECT_RATIO: f32 = 16.0 / 9.0;
@@ -39,6 +41,7 @@ fn main() {
         .add_plugin(MovingCameraPlugin)
         .add_plugin(LoadSavePlugin)
         .add_plugin(TrainPlugin)
+        .add_plugin(UIOverlayPlugin)
         .run();
 }
 

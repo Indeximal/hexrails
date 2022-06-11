@@ -5,7 +5,7 @@ use bevy::{input::mouse::MouseButtonInput, prelude::*};
 use bevy_inspector_egui::Inspectable;
 use serde::{Deserialize, Serialize};
 
-use crate::camera::current_cursor_world_pos;
+use crate::camera::{current_cursor_world_pos, FlyCamera2d};
 
 pub const TILE_SCALE: f32 = 0.5;
 pub const TILE_SIZE: f32 = 128.;
@@ -196,7 +196,7 @@ fn mouse_button_events(
     mut mousebtn_evr: EventReader<MouseButtonInput>,
     mut click_event: EventWriter<TileClickEvent>,
     windows: Res<Windows>,
-    cam: Query<(&Transform, &OrthographicProjection), With<Camera>>,
+    cam: Query<(&Transform, &OrthographicProjection), With<FlyCamera2d>>,
 ) {
     use bevy::input::ElementState;
 

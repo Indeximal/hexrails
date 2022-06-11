@@ -34,6 +34,12 @@ pub struct TrainHead {
     pub velocity: f32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TrainUnitType {
+    Locomotive,
+    Wagon,
+}
+
 #[derive(Component, Inspectable)]
 pub struct TrainUnit {
     /// Starting with 0, this is subtracted from the path progress
