@@ -1,6 +1,5 @@
-use crate::tilemap::*;
-use bevy::prelude::*;
-use bevy_inspector_egui::bevy_egui::EguiContext;
+use crate::{tilemap::*, ui::InteractingState};
+use bevy::{ecs::schedule::ShouldRun, prelude::*};
 use petgraph::graphmap::DiGraphMap;
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +11,11 @@ impl Plugin for RailRoadPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system_to_stage(StartupStage::PreStartup, load_texture_atlas)
             .add_startup_system(spawn_rail_root)
-            .add_system(rail_builder);
+            .add_system_set(
+                SystemSet::new()
+                    .with_run_criteria(rail_builder_condition)
+                    .with_system(rail_builder),
+            );
     }
 }
 
@@ -53,6 +56,13 @@ impl TileFace {
     }
 }
 
+fn rail_builder_condition(state: Res<State<InteractingState>>) -> ShouldRun {
+    match state.current() {
+        InteractingState::PlaceRails(_) => ShouldRun::Yes,
+        _ => ShouldRun::No,
+    }
+}
+
 /// This system spawns the root node for all the rail sprites, useful mostly for inspecting.
 fn spawn_rail_root(mut commands: Commands) {
     commands
@@ -68,15 +78,17 @@ fn rail_builder(
     mut click_event: EventReader<TileClickEvent>,
     mut rail_graph: ResMut<RailGraph>,
     root_query: Query<Entity, With<RailNetworkRoot>>,
-    mut egui_context: ResMut<EguiContext>,
+    state: Res<State<InteractingState>>,
 ) {
-    // Skip if the mouse is above a inspector window
-    if egui_context.ctx_mut().wants_pointer_input() {
-        return;
-    }
-
     let rail_graph = rail_graph.as_mut();
     let root_entity = root_query.single();
+    let rail_type = match state.current() {
+        InteractingState::PlaceRails(v) => v.clone(),
+        _ => unreachable!(
+            "The run condition should insure that the rail builder is only run in the PlaceRails state!"
+        ),
+    };
+
     for evt in click_event.iter() {
         if let Some(side) = evt.side {
             match evt.button {
@@ -87,25 +99,7 @@ fn rail_builder(
                     rail_graph,
                     evt.coord,
                     side,
-                    RailType::Straight,
-                ),
-                MouseButton::Right => build_rail(
-                    &mut commands,
-                    &atlas_h,
-                    root_entity,
-                    rail_graph,
-                    evt.coord,
-                    side,
-                    RailType::CurvedRight,
-                ),
-                MouseButton::Middle => build_rail(
-                    &mut commands,
-                    &atlas_h,
-                    root_entity,
-                    rail_graph,
-                    evt.coord,
-                    side,
-                    RailType::CurvedLeft,
+                    rail_type,
                 ),
                 _ => (),
             }

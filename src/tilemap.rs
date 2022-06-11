@@ -2,7 +2,7 @@ use core::fmt;
 use std::f32::consts::PI;
 
 use bevy::{input::mouse::MouseButtonInput, prelude::*};
-use bevy_inspector_egui::Inspectable;
+use bevy_inspector_egui::{bevy_egui::EguiContext, Inspectable};
 use serde::{Deserialize, Serialize};
 
 use crate::camera::{current_cursor_world_pos, FlyCamera2d};
@@ -197,7 +197,21 @@ fn mouse_button_events(
     mut click_event: EventWriter<TileClickEvent>,
     windows: Res<Windows>,
     cam: Query<(&Transform, &OrthographicProjection), With<FlyCamera2d>>,
+    mut egui_context: ResMut<EguiContext>,
+    other_buttons: Query<&Interaction>,
 ) {
+    // Skip if the mouse is above a inspector window or other gui
+    if egui_context.ctx_mut().wants_pointer_input() {
+        return;
+    }
+    // todo: fix, this doesn't work yet
+    if other_buttons
+        .iter()
+        .any(|interact| *interact == Interaction::Clicked)
+    {
+        return;
+    }
+
     use bevy::input::ElementState;
 
     let (pos, cam) = cam.single();
