@@ -1,5 +1,8 @@
+use std::f32::consts::PI;
+
 use bevy::{core::FixedTimestep, prelude::*};
 use bevy_inspector_egui::Inspectable;
+use petgraph::EdgeDirection;
 
 use crate::{
     railroad::RailGraph,
@@ -15,22 +18,23 @@ impl Plugin for TrainPlugin {
         // Todo: don't rely on stages
         app.add_startup_system_to_stage(StartupStage::PreStartup, load_texture_atlas)
             .add_startup_system_to_stage(StartupStage::PostStartup, create_test_train)
-            .add_system(move_trains)
+            .add_system(position_train_units)
             // Todo: move to iyes_loopless instead
             .add_system_set(
                 SystemSet::new()
                     .with_run_criteria(FixedTimestep::steps_per_second(20.))
-                    .with_system(drive_trains_tick),
+                    .with_system(tick_trains),
             );
     }
 }
 
 #[derive(Component, Inspectable)]
 pub struct TrainHead {
-    /// From 0 at the start to len at the destination
+    /// From 0 at the start to len at the destination. Must be contain at least two values.
     pub path: Vec<TileFace>,
     /// A fractional index into path
     pub path_progress: f32,
+    /// Current change of progress per tick. Should be non-negative
     pub velocity: f32,
 }
 
@@ -46,16 +50,42 @@ pub struct TrainUnit {
     pub position: u32,
 }
 
-fn drive_trains_tick(mut trains: Query<&mut TrainHead>) {
+/// Fixed timestep system to update the progress of the trains
+fn tick_trains(mut trains: Query<&mut TrainHead>, graph_res: Res<RailGraph>) {
+    let graph = graph_res.as_ref();
     for mut train in trains.iter_mut() {
         train.path_progress += train.velocity;
+        let max_progress = (train.path.len() - 1) as f32;
+        if train.path_progress > max_progress {
+            // attempt to extend the path if necessary: needed for manual driving
+            graph
+                .graph
+                .neighbors_directed(
+                    train
+                        .path
+                        .last()
+                        .expect("TrainHead::path invariant broken!")
+                        .clone(),
+                    EdgeDirection::Outgoing,
+                )
+                .any(|a| {
+                    // Todo: implement steering
+                    // The remove operation is there to stop the path from growing continiously.
+                    // But it does use O(n) time, but since n should stay constant this way, this
+                    // is fine.
+                    train.path.remove(0);
+                    train.path_progress -= 1.;
+                    train.path.push(a);
+                    true // shortcircuit
+                });
+        }
         train.path_progress = train.path_progress.clamp(0., (train.path.len() - 1) as f32);
     }
 }
 
-/// System to update the tranform of the train wagons.
+/// System to update the transform of the train wagons.
 /// Precondition: progress <= path.len() - 1
-fn move_trains(
+fn position_train_units(
     mut train_wagons: Query<(&Parent, &mut Transform, &TrainUnit)>,
     trains: Query<&TrainHead>,
 ) {
@@ -70,8 +100,8 @@ fn move_trains(
             continue;
         }
         let render_progress = progress - 0.5;
-        let start = head.path[render_progress.ceil() as usize - 1];
-        let end = head.path[render_progress.ceil() as usize];
+        let start = head.path[render_progress.floor() as usize];
+        let end = head.path[render_progress.floor() as usize + 1];
         move_train_unit(transform.as_mut(), start, end, render_progress.fract())
     }
 }
@@ -83,17 +113,23 @@ fn face_position(face: TileFace) -> Vec2 {
     origin + offset
 }
 
+/// Helper to change the `output` Transform to intrapolate the start and end position and rotation
 fn move_train_unit(output: &mut Transform, start: TileFace, end: TileFace, t: f32) {
+    // todo: actually move in an arc and not linear
     let start_pos = face_position(start);
     let end_pos = face_position(end);
     let pos = start_pos * (1. - t) + end_pos * t;
     let start_angle = start.side.to_angle();
     let end_angle = end.side.to_angle();
-    let angle = start_angle * (1. - t) + end_angle * t;
+    // From https://gist.github.com/shaunlebron/8832585
+    let da = (end_angle - start_angle) % (2. * PI);
+    let angle_diff = (2. * da) % (2. * PI) - da;
+    let angle = start_angle + angle_diff * t;
     output.translation = pos.extend(Z_LAYER_TRAINS);
     output.rotation = Quat::from_rotation_z(angle);
 }
 
+/// Temporary helper to search for a hardcorded path
 fn create_test_path(rail_graph: &RailGraph) -> Vec<TileFace> {
     let start = TileFace {
         tile: TileCoordinate(-7, 0),
