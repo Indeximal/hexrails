@@ -23,7 +23,6 @@ pub const ASPECT_RATIO: f32 = 16.0 / 9.0;
 fn main() {
     let height = 900.0;
     App::new()
-        .add_plugins(DefaultPlugins)
         .insert_resource(ClearColor(BG_COLOR))
         .insert_resource(WindowDescriptor {
             width: height * ASPECT_RATIO,
@@ -34,6 +33,7 @@ fn main() {
             ..Default::default()
         })
         .add_startup_system(print_version)
+        .add_plugins(DefaultPlugins)
         .add_plugin(DebugPlugin)
         .add_plugin(TerrainPlugin)
         .add_plugin(TileMapPlugin)

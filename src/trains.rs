@@ -3,6 +3,7 @@ use std::f32::consts::PI;
 use bevy::{core::FixedTimestep, ecs::schedule::ShouldRun, prelude::*};
 use bevy_inspector_egui::Inspectable;
 use petgraph::EdgeDirection;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     railroad::RailGraph,
@@ -33,7 +34,7 @@ impl Plugin for TrainPlugin {
     }
 }
 
-#[derive(Component, Inspectable)]
+#[derive(Component, Inspectable, Serialize, Deserialize)]
 pub struct TrainHead {
     /// A fractional index into path, where the front of the train is.
     /// Must obey `length + 1 < path_progress <= path.len() - 1` (todo: check)
@@ -67,7 +68,7 @@ impl TrainHead {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TrainUnitType {
     Locomotive,
     Wagon,
@@ -231,6 +232,7 @@ fn spawn_wagon(
         .insert(TrainUnit {
             position: insert_index,
         })
+        .insert(wagon_type)
         .insert(Name::new("Wagon"))
         .id()
 }
