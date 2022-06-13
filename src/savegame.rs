@@ -5,17 +5,18 @@ use petgraph::graphmap::DiGraphMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    railroad::RailGraph,
+    railroad::{spawn_rail, RailAtlas, RailGraph, RailNetworkRoot},
     trains::{spawn_wagon, TrainAtlas, TrainHead, TrainUnit, TrainUnitType},
 };
 
 const SAVEGAME_PATH: &str = "savegame/stupid.json";
+const CURRENT_SAVEGAME_VERSION: u32 = 2;
 
 pub struct LoadSavePlugin;
 
 impl Plugin for LoadSavePlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(initial_load_system)
+        app.add_startup_system_to_stage(StartupStage::PostStartup, initial_load_system)
             .add_system(save_system);
     }
 }
@@ -27,12 +28,14 @@ impl Plugin for LoadSavePlugin {
 /// *Make sure to keep these two structs the same!*
 #[derive(Serialize)]
 struct SavedGame<'a> {
+    version: u32,
     network: &'a RailGraph,
     trains: Vec<SavedTrain<'a>>,
 }
 
 #[derive(Deserialize)]
 struct LoadedGame {
+    version: u32,
     network: RailGraph,
     trains: Vec<LoadedTrain>,
 }
@@ -40,6 +43,7 @@ struct LoadedGame {
 impl Default for LoadedGame {
     fn default() -> Self {
         Self {
+            version: CURRENT_SAVEGAME_VERSION,
             network: RailGraph {
                 graph: DiGraphMap::new(),
             },
@@ -79,18 +83,24 @@ fn save_system(
     trains: Query<(Entity, &Children, &TrainHead)>,
     wagons: Query<(&TrainUnitType, &TrainUnit)>,
     train_atlas: Res<TrainAtlas>,
+    rail_atlas: Res<RailAtlas>,
+    rail_root: Query<Entity, With<RailNetworkRoot>>,
 ) {
     let graph = graph_res.as_ref();
     if key_input.just_pressed(KeyCode::F6) {
         save_game(graph, trains, wagons);
     } else if key_input.just_pressed(KeyCode::F5) {
-        clean_game(&mut commands, trains);
-        load_game(&mut commands, train_atlas.as_ref());
+        clean_game(&mut commands, trains, rail_root.single());
+        load_game(&mut commands, train_atlas.as_ref(), rail_atlas.as_ref());
     }
 }
 
-fn initial_load_system(mut commands: Commands, atlas: Res<TrainAtlas>) {
-    load_game(&mut commands, atlas.as_ref());
+fn initial_load_system(
+    mut commands: Commands,
+    train_atlas: Res<TrainAtlas>,
+    rail_atlas: Res<RailAtlas>,
+) {
+    load_game(&mut commands, train_atlas.as_ref(), rail_atlas.as_ref());
 }
 
 fn save_game(
@@ -122,6 +132,7 @@ fn save_game(
     }
 
     let savegame = SavedGame {
+        version: CURRENT_SAVEGAME_VERSION,
         network: graph,
         trains: trains,
     };
@@ -130,13 +141,18 @@ fn save_game(
 }
 
 /// This helper function takes the same query as save and instead despawns relevant entities
-fn clean_game(commands: &mut Commands, trains: Query<(Entity, &Children, &TrainHead)>) {
+fn clean_game(
+    commands: &mut Commands,
+    trains: Query<(Entity, &Children, &TrainHead)>,
+    rail_root: Entity,
+) {
+    commands.entity(rail_root).despawn_recursive();
     for (entity, _, _) in trains.iter() {
         commands.entity(entity).despawn_recursive();
     }
 }
 
-fn load_game(commands: &mut Commands, atlas: &TrainAtlas) {
+fn load_game(commands: &mut Commands, train_atlas: &TrainAtlas, rail_atlas: &RailAtlas) {
     let savegame_data = fs::read_to_string(SAVEGAME_PATH);
     let savegame = match savegame_data {
         Ok(save_str) => {
@@ -145,10 +161,26 @@ fn load_game(commands: &mut Commands, atlas: &TrainAtlas) {
         Err(_) => LoadedGame::default(),
     };
 
+    let savegame = if savegame.version != CURRENT_SAVEGAME_VERSION {
+        error!(
+            "Savegame is not compatible: expected {}, was {}!",
+            CURRENT_SAVEGAME_VERSION, savegame.version
+        );
+        LoadedGame::default()
+    } else {
+        savegame
+    };
+
+    // Trains
     for train in savegame.trains {
         let mut wagons = Vec::new();
         for (index, wagon) in train.wagons.iter().enumerate() {
-            wagons.push(spawn_wagon(commands, atlas, wagon.wagon_type, index as u32));
+            wagons.push(spawn_wagon(
+                commands,
+                train_atlas,
+                wagon.wagon_type,
+                index as u32,
+            ));
         }
 
         // todo: use helper function
@@ -160,7 +192,18 @@ fn load_game(commands: &mut Commands, atlas: &TrainAtlas) {
             .push_children(&wagons);
     }
 
-    // replacing previous RailGraph resource
+    // Rails
+    let rail_root = commands
+        .spawn_bundle(TransformBundle::default())
+        .insert(RailNetworkRoot)
+        .insert(Name::new("Rail Network"))
+        .id();
+    for (start, _, edge) in savegame.network.graph.all_edges() {
+        if let Some(rail_type) = edge.display_type {
+            spawn_rail(
+                commands, rail_atlas, rail_root, start.tile, start.side, rail_type,
+            );
+        }
+    }
     commands.insert_resource(savegame.network);
-    // Todo: spawn the sprites aswell
 }

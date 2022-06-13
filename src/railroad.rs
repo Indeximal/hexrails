@@ -10,7 +10,6 @@ pub struct RailRoadPlugin;
 impl Plugin for RailRoadPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system_to_stage(StartupStage::PreStartup, load_texture_atlas)
-            .add_startup_system(spawn_rail_root)
             .add_system_set(
                 SystemSet::new()
                     .with_run_criteria(rail_builder_condition)
@@ -20,17 +19,24 @@ impl Plugin for RailRoadPlugin {
 }
 
 #[derive(Component)]
-struct RailNetworkRoot;
+pub struct RailNetworkRoot;
 
 #[derive(Serialize, Deserialize)]
 pub struct RailGraph {
-    pub graph: DiGraphMap<TileFace, ()>,
+    pub graph: DiGraphMap<TileFace, RailEdge>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct RailEdge {
+    /// Either None if it should not be rendered or Some(RailType) with the type
+    /// of the sprite it should render as
+    pub display_type: Option<RailType>,
 }
 
 #[derive(Component)]
 pub struct RailTile {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RailType {
     Straight,
     CurvedLeft,
@@ -61,14 +67,6 @@ fn rail_builder_condition(state: Res<State<InteractingState>>) -> ShouldRun {
         InteractingState::PlaceRails(_) => ShouldRun::Yes,
         _ => ShouldRun::No,
     }
-}
-
-/// This system spawns the root node for all the rail sprites, useful mostly for inspecting.
-fn spawn_rail_root(mut commands: Commands) {
-    commands
-        .spawn_bundle(TransformBundle::default())
-        .insert(RailNetworkRoot)
-        .insert(Name::new("Rail Network"));
 }
 
 /// This system tries to build rails both in the graph and with sprites when the mouse is clicked.
@@ -123,10 +121,18 @@ fn build_rail(
     };
     let end_face = start_face.next_face_with(rail_type);
 
-    let edge1 = rail_graph.graph.add_edge(start_face, end_face, ());
-    let edge2 = rail_graph
-        .graph
-        .add_edge(end_face.opposite(), start_face.opposite(), ());
+    let edge1 = rail_graph.graph.add_edge(
+        start_face,
+        end_face,
+        RailEdge {
+            display_type: Some(rail_type),
+        },
+    );
+    let edge2 = rail_graph.graph.add_edge(
+        end_face.opposite(),
+        start_face.opposite(),
+        RailEdge { display_type: None },
+    );
     // if neither edge previously existed:
     if edge1.is_none() && edge2.is_none() {
         info!("Rail built @{} -> {}", start_face.tile, end_face.tile);
@@ -142,9 +148,9 @@ fn build_rail(
 }
 
 /// This helper function spawns a rail sprite
-fn spawn_rail(
+pub fn spawn_rail(
     commands: &mut Commands,
-    atlas: &Res<RailAtlas>,
+    atlas: &RailAtlas,
     root_entity: Entity,
     position: TileCoordinate,
     start_side: TileSide,
@@ -183,7 +189,7 @@ fn spawn_rail(
     commands.entity(root_entity).add_child(child);
 }
 
-struct RailAtlas(Handle<TextureAtlas>);
+pub struct RailAtlas(Handle<TextureAtlas>);
 
 /// This system loads the sprite atlas for the rails
 fn load_texture_atlas(
