@@ -214,7 +214,7 @@ fn insert_wagon(
 }
 
 // Helper to spawn a wagon sprite
-fn spawn_wagon(
+pub fn spawn_wagon(
     commands: &mut Commands,
     atlas: &TrainAtlas,
     wagon_type: TrainUnitType,
@@ -318,7 +318,7 @@ fn move_train_unit(output: &mut Transform, start: TileFace, end: TileFace, t: f3
     output.rotation = Quat::from_rotation_z(angle);
 }
 
-struct TrainAtlas(Handle<TextureAtlas>);
+pub struct TrainAtlas(Handle<TextureAtlas>);
 
 /// System to load the sprite sheet
 fn load_texture_atlas(

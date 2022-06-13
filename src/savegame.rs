@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     railroad::RailGraph,
-    trains::{TrainHead, TrainUnit, TrainUnitType},
+    trains::{spawn_wagon, TrainAtlas, TrainHead, TrainUnit, TrainUnitType},
 };
 
 const SAVEGAME_PATH: &str = "savegame/stupid.json";
@@ -52,7 +52,7 @@ impl Default for LoadedGame {
 /// contains the path and position of the whole train and all its wagons
 struct SavedTrain<'a> {
     controller: &'a TrainHead,
-    wagons: Vec<SavedWagon>,
+    wagons: Vec<SavedWagon<'a>>,
 }
 
 #[derive(Deserialize)]
@@ -63,8 +63,8 @@ struct LoadedTrain {
 
 /// contains the components of a individual wagon (or locomotive)
 #[derive(Serialize)]
-struct SavedWagon {
-    wagon_type: TrainUnitType,
+struct SavedWagon<'a> {
+    wagon_type: &'a TrainUnitType,
 }
 
 #[derive(Deserialize)]
@@ -76,37 +76,38 @@ fn save_system(
     key_input: Res<Input<KeyCode>>,
     mut commands: Commands,
     graph_res: Res<RailGraph>,
-    trains: Query<(&Children, &TrainHead)>,
+    trains: Query<(Entity, &Children, &TrainHead)>,
     wagons: Query<(&TrainUnitType, &TrainUnit)>,
+    train_atlas: Res<TrainAtlas>,
 ) {
     let graph = graph_res.as_ref();
     if key_input.just_pressed(KeyCode::F6) {
         save_game(graph, trains, wagons);
-    }
-    if key_input.just_pressed(KeyCode::F5) {
-        load_game(&mut commands);
+    } else if key_input.just_pressed(KeyCode::F5) {
+        clean_game(&mut commands, trains);
+        load_game(&mut commands, train_atlas.as_ref());
     }
 }
 
-fn initial_load_system(mut commands: Commands) {
-    load_game(&mut commands);
+fn initial_load_system(mut commands: Commands, atlas: Res<TrainAtlas>) {
+    load_game(&mut commands, atlas.as_ref());
 }
 
 fn save_game(
     graph: &RailGraph,
-    trains_query: Query<(&Children, &TrainHead)>,
+    trains_query: Query<(Entity, &Children, &TrainHead)>,
     wagons_query: Query<(&TrainUnitType, &TrainUnit)>,
 ) {
     info!("Saving game state");
     // Because of lifetimes I can't easily extract this into a function
     let mut trains = Vec::new();
-    for (children, head) in trains_query.iter() {
+    for (_, children, head) in trains_query.iter() {
         // Wagons here are sorted after insertion into the vector, which is suboptimal, since
         // the index is technically known. But the borrow checker notices that this is not
         // particullarly nice. Problem is that `Option` needs Clone.
         let mut wagons_with_id = Vec::new();
         for &child in children.iter() {
-            if let Ok((&unit_type, unit_id)) = wagons_query.get(child) {
+            if let Ok((unit_type, unit_id)) = wagons_query.get(child) {
                 let wagon = SavedWagon {
                     wagon_type: unit_type,
                 };
@@ -136,7 +137,14 @@ fn save_game(
     fs::write(SAVEGAME_PATH, savegame_data).expect("Couldn't write to file");
 }
 
-fn load_game(commands: &mut Commands) {
+/// This helper function takes the same query as save and instead despawns relevant entities
+fn clean_game(commands: &mut Commands, trains: Query<(Entity, &Children, &TrainHead)>) {
+    for (entity, _, _) in trains.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+}
+
+fn load_game(commands: &mut Commands, atlas: &TrainAtlas) {
     let savegame_data = fs::read_to_string(SAVEGAME_PATH);
     let savegame = match savegame_data {
         Ok(save_str) => {
@@ -144,6 +152,21 @@ fn load_game(commands: &mut Commands) {
         }
         Err(_) => LoadedGame::default(),
     };
+
+    for train in savegame.trains {
+        let mut wagons = Vec::new();
+        for (index, wagon) in train.wagons.iter().enumerate() {
+            wagons.push(spawn_wagon(commands, atlas, wagon.wagon_type, index as u32));
+        }
+
+        // todo: use helper function
+        commands
+            .spawn()
+            .insert_bundle(TransformBundle::default())
+            .insert(Name::new("Train"))
+            .insert(train.controller)
+            .push_children(&wagons);
+    }
 
     // replacing previous RailGraph resource
     commands.insert_resource(savegame.network);
