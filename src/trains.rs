@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, ops::Add};
 
 use bevy::{core::FixedTimestep, ecs::schedule::ShouldRun, prelude::*};
 use bevy_inspector_egui::Inspectable;
@@ -24,13 +24,61 @@ impl Plugin for TrainPlugin {
             .add_system_set(
                 SystemSet::new()
                     .with_run_criteria(FixedTimestep::steps_per_second(20.))
-                    .with_system(tick_trains),
+                    .with_system(tick_trains)
+                    .with_system(manual_train_driving),
             )
             .add_system_set(
                 SystemSet::new()
                     .with_run_criteria(train_builder_condition)
                     .with_system(train_builder),
             );
+    }
+}
+
+#[derive(Component)]
+pub struct PlayerControlledTrain;
+
+#[derive(Component, Inspectable, Serialize, Deserialize)]
+pub struct WagonStats {
+    pub weight: f32,
+    pub acceleration_power: f32,
+    pub braking_power: f32,
+}
+
+impl WagonStats {
+    fn default_for_type(wagon_type: TrainUnitType) -> Self {
+        match wagon_type {
+            TrainUnitType::Locomotive => Self {
+                weight: 1000.0,
+                acceleration_power: 10.0,
+                braking_power: 15.0,
+            },
+            TrainUnitType::Wagon => Self {
+                weight: 500.0,
+                acceleration_power: 0.0,
+                braking_power: 5.0,
+            },
+        }
+    }
+
+    fn additive_identiy() -> Self {
+        WagonStats {
+            weight: 0.,
+            acceleration_power: 0.,
+            braking_power: 0.,
+        }
+    }
+}
+
+impl Add<&WagonStats> for WagonStats {
+    type Output = WagonStats;
+
+    fn add(self, rhs: &WagonStats) -> Self::Output {
+        WagonStats {
+            weight: self.weight + rhs.weight,
+            acceleration_power: self.acceleration_power + rhs.acceleration_power,
+            braking_power: self.braking_power + rhs.braking_power,
+        }
     }
 }
 
@@ -89,6 +137,34 @@ pub struct TrainUnit {
     pub position: u32,
 }
 
+fn manual_train_driving(
+    mut train: Query<(&mut TrainHead, &Children), With<PlayerControlledTrain>>,
+    stats: Query<&WagonStats>,
+    input: Res<Input<KeyCode>>,
+) {
+    if let Ok((mut head, children)) = train.get_single_mut() {
+        let total_stats = children
+            .iter()
+            .filter_map(|&id| stats.get(id).ok())
+            .fold(WagonStats::additive_identiy(), WagonStats::add);
+
+        let mut acceleration = 0.0;
+        if input.pressed(KeyCode::Up) {
+            acceleration += total_stats.acceleration_power;
+        }
+        if input.pressed(KeyCode::Down) {
+            acceleration -= total_stats.braking_power;
+        }
+        // allow for somewhat of a one pedal drive
+        if acceleration == 0.0 {
+            acceleration = -10.0;
+        }
+        head.velocity += acceleration / total_stats.weight;
+        // Todo: extract max speed into component
+        head.velocity = head.velocity.clamp(0.0, 1.0);
+    }
+}
+
 fn train_builder_condition(state: Res<State<InteractingState>>) -> ShouldRun {
     match state.current() {
         InteractingState::PlaceTrains(_) => ShouldRun::Yes,
@@ -107,7 +183,7 @@ fn train_builder(
     wagons: Query<&mut TrainUnit>,
 ) {
     let graph = rail_graph.as_ref();
-    let trail_type = match state.current() {
+    let wagon_type = match state.current() {
         InteractingState::PlaceTrains(v) => v.clone(),
         _ => unreachable!(
             "The run condition should insure that the train builder is only run in the PlaceTrains state!"
@@ -141,7 +217,8 @@ fn train_builder(
                     children,
                     wagons,
                     parent,
-                    trail_type.clone(),
+                    wagon_type.clone(),
+                    WagonStats::default_for_type(wagon_type),
                     new_index,
                 );
                 train.length += 1;
@@ -150,7 +227,7 @@ fn train_builder(
             }
         }
         if !found_train {
-            create_new_train(&mut commands, &atlas, face, &graph, trail_type);
+            create_new_train(&mut commands, &atlas, face, &graph, wagon_type);
         }
         // todo: remove limit for one click per frame, needed for borrow checker. (Why?)
         break;
@@ -174,18 +251,25 @@ fn create_new_train(
         .next()
         .expect("Broke precondition: `face is in the graph and has a neighbor`!");
 
-    let new_wagon = spawn_wagon(commands, atlas, wagon_type, 0);
+    let first_wagon = spawn_wagon(
+        commands,
+        atlas,
+        wagon_type,
+        WagonStats::default_for_type(wagon_type),
+        0,
+    );
     commands
         .spawn()
         .insert_bundle(TransformBundle::default())
         .insert(Name::new("Train"))
+        .insert(PlayerControlledTrain)
         .insert(TrainHead {
             path: vec![face, next_face],
             path_progress: 1.0,
             velocity: 0.01, // todo: remove, this is temporary
             length: 1,
         })
-        .add_child(new_wagon);
+        .add_child(first_wagon);
 }
 
 /// Helper to insert a wagon into an existing train and move all other wagons accordingly
@@ -196,6 +280,7 @@ fn insert_wagon(
     mut sibling_query: Query<&mut TrainUnit>,
     parent: Entity,
     wagon_type: TrainUnitType,
+    wagon_stats: WagonStats,
     insert_index: u32,
 ) {
     info!("Inserting wagon at {}", insert_index);
@@ -209,7 +294,7 @@ fn insert_wagon(
         }
     }
 
-    let new_wagon = spawn_wagon(commands, atlas, wagon_type, insert_index);
+    let new_wagon = spawn_wagon(commands, atlas, wagon_type, wagon_stats, insert_index);
     commands.entity(parent).add_child(new_wagon);
 }
 
@@ -218,10 +303,12 @@ pub fn spawn_wagon(
     commands: &mut Commands,
     atlas: &TrainAtlas,
     wagon_type: TrainUnitType,
+    wagon_stats: WagonStats,
     insert_index: u32,
 ) -> Entity {
     let mut sprite = TextureAtlasSprite::new(wagon_type.into_texture_atlas_index());
     sprite.custom_size = Some(Vec2::splat(TILE_SCALE));
+
     commands
         .spawn_bundle(SpriteSheetBundle {
             sprite: sprite,
@@ -233,6 +320,7 @@ pub fn spawn_wagon(
             position: insert_index,
         })
         .insert(wagon_type)
+        .insert(wagon_stats)
         .insert(Name::new("Wagon"))
         .id()
 }

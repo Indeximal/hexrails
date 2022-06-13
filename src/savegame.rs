@@ -1,4 +1,4 @@
-use std::fs;
+use std::{error::Error, fs};
 
 use bevy::prelude::*;
 use petgraph::graphmap::DiGraphMap;
@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     railroad::{spawn_rail, RailAtlas, RailGraph, RailNetworkRoot},
-    trains::{spawn_wagon, TrainAtlas, TrainHead, TrainUnit, TrainUnitType},
+    trains::{spawn_wagon, TrainAtlas, TrainHead, TrainUnit, TrainUnitType, WagonStats},
 };
 
 const SAVEGAME_PATH: &str = "savegame/stupid.json";
-const CURRENT_SAVEGAME_VERSION: u32 = 2;
+const CURRENT_SAVEGAME_VERSION: u32 = 3;
 
 pub struct LoadSavePlugin;
 
@@ -69,19 +69,22 @@ struct LoadedTrain {
 #[derive(Serialize)]
 struct SavedWagon<'a> {
     wagon_type: &'a TrainUnitType,
+    stats: &'a WagonStats,
 }
 
 #[derive(Deserialize)]
 struct LoadedWagon {
     wagon_type: TrainUnitType,
+    stats: WagonStats,
 }
 
+/// System to listen to keypresses and load/save the game accordingly
 fn save_system(
     key_input: Res<Input<KeyCode>>,
     mut commands: Commands,
     graph_res: Res<RailGraph>,
     trains: Query<(Entity, &Children, &TrainHead)>,
-    wagons: Query<(&TrainUnitType, &TrainUnit)>,
+    wagons: Query<(&TrainUnit, &TrainUnitType, &WagonStats)>,
     train_atlas: Res<TrainAtlas>,
     rail_atlas: Res<RailAtlas>,
     rail_root: Query<Entity, With<RailNetworkRoot>>,
@@ -103,10 +106,11 @@ fn initial_load_system(
     load_game(&mut commands, train_atlas.as_ref(), rail_atlas.as_ref());
 }
 
+/// Helper to save the game
 fn save_game(
     graph: &RailGraph,
     trains_query: Query<(Entity, &Children, &TrainHead)>,
-    wagons_query: Query<(&TrainUnitType, &TrainUnit)>,
+    wagons_query: Query<(&TrainUnit, &TrainUnitType, &WagonStats)>,
 ) {
     info!("Saving game state");
     // Because of lifetimes I can't easily extract this into a function
@@ -115,9 +119,10 @@ fn save_game(
         // Thanks a lot to https://stackoverflow.com/a/72605922/19331219
         let mut wagons = (0..children.len()).map(|_| None).collect::<Vec<_>>();
         for &child in children.iter() {
-            if let Ok((unit_type, unit_id)) = wagons_query.get(child) {
+            if let Ok((unit_id, unit_type, unit_stats)) = wagons_query.get(child) {
                 let wagon = SavedWagon {
                     wagon_type: unit_type,
+                    stats: unit_stats,
                 };
                 wagons[unit_id.position as usize] = Some(wagon);
             }
@@ -152,33 +157,33 @@ fn clean_game(
     }
 }
 
-fn load_game(commands: &mut Commands, train_atlas: &TrainAtlas, rail_atlas: &RailAtlas) {
-    let savegame_data = fs::read_to_string(SAVEGAME_PATH);
-    let savegame = match savegame_data {
-        Ok(save_str) => {
-            serde_json::from_str(save_str.as_str()).expect("Coundn't deserialize savegame")
-        }
-        Err(_) => LoadedGame::default(),
-    };
+fn load_savegame_file() -> Result<LoadedGame, Box<dyn Error>> {
+    let savegame_data = fs::read_to_string(SAVEGAME_PATH)?;
+    let savegame: LoadedGame = serde_json::from_str(savegame_data.as_str())?;
+    info!("Loaded savegame v{}", savegame.version);
+    // Todo: implement this, problem is, usually the from_str fails anyway, so this is unnesssery.
+    // if savegame.version != CURRENT_SAVEGAME_VERSION {
+    //     Err(format!(
+    //         "Savegame is not compatible: expected {}, was {}!",
+    //         CURRENT_SAVEGAME_VERSION, savegame.version
+    //     ))
+    // }
+    Ok(savegame)
+}
 
-    let savegame = if savegame.version != CURRENT_SAVEGAME_VERSION {
-        error!(
-            "Savegame is not compatible: expected {}, was {}!",
-            CURRENT_SAVEGAME_VERSION, savegame.version
-        );
-        LoadedGame::default()
-    } else {
-        savegame
-    };
+/// Helper to spawn the dynamic game state from a savegame. Requires the state to be cleaned first.
+fn load_game(commands: &mut Commands, train_atlas: &TrainAtlas, rail_atlas: &RailAtlas) {
+    let savegame = load_savegame_file().unwrap_or_default();
 
     // Trains
     for train in savegame.trains {
         let mut wagons = Vec::new();
-        for (index, wagon) in train.wagons.iter().enumerate() {
+        for (index, wagon) in train.wagons.into_iter().enumerate() {
             wagons.push(spawn_wagon(
                 commands,
                 train_atlas,
                 wagon.wagon_type,
+                wagon.stats,
                 index as u32,
             ));
         }
