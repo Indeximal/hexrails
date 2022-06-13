@@ -102,25 +102,17 @@ fn save_game(
     // Because of lifetimes I can't easily extract this into a function
     let mut trains = Vec::new();
     for (_, children, head) in trains_query.iter() {
-        // Wagons here are sorted after insertion into the vector, which is suboptimal, since
-        // the index is technically known. But the borrow checker notices that this is not
-        // particullarly nice. Problem is that `Option` needs Clone.
-        let mut wagons_with_id = Vec::new();
+        // Thanks a lot to https://stackoverflow.com/a/72605922/19331219
+        let mut wagons = (0..children.len()).map(|_| None).collect::<Vec<_>>();
         for &child in children.iter() {
             if let Ok((unit_type, unit_id)) = wagons_query.get(child) {
                 let wagon = SavedWagon {
                     wagon_type: unit_type,
                 };
-                wagons_with_id.push((wagon, unit_id.position));
+                wagons[unit_id.position as usize] = Some(wagon);
             }
         }
-        // This reverse sort and stack based map is needed because I don't want to make `SavedWagon` Clone.
-        // Might have been a dump idea xD.
-        wagons_with_id.sort_by_key(|(_, i)| -(*i as i32));
-        let mut wagons = Vec::new();
-        while !wagons_with_id.is_empty() {
-            wagons.push(wagons_with_id.pop().unwrap().0);
-        }
+        let wagons = wagons.into_iter().map(Option::unwrap).collect();
 
         let train = SavedTrain {
             controller: head,
