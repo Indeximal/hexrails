@@ -1,23 +1,29 @@
 use std::{error::Error, fs};
 
-use bevy::prelude::*;
+use bevy::{ecs::system::CommandQueue, prelude::*};
 use petgraph::graphmap::DiGraphMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     railroad::{spawn_rail, RailAtlas, RailGraph, RailNetworkRoot},
-    trains::{spawn_wagon, TrainAtlas, TrainHead, TrainUnit, TrainUnitType, WagonStats},
+    trains::{
+        spawn_wagon, TrainAtlas, TrainBundle, TrainHead, TrainUnit, TrainUnitType, Velocity,
+        WagonStats,
+    },
 };
 
 const SAVEGAME_PATH: &str = "savegame/stupid.json";
-const CURRENT_SAVEGAME_VERSION: u32 = 3;
+const CURRENT_SAVEGAME_VERSION: u32 = 4;
 
 pub struct LoadSavePlugin;
 
 impl Plugin for LoadSavePlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system_to_stage(StartupStage::PostStartup, initial_load_system)
-            .add_system(save_system);
+        app.add_startup_system_to_stage(
+            StartupStage::PostStartup,
+            initial_load_system.exclusive_system(),
+        )
+        .add_system(save_system.exclusive_system());
     }
 }
 
@@ -56,12 +62,14 @@ impl Default for LoadedGame {
 /// contains the path and position of the whole train and all its wagons
 struct SavedTrain<'a> {
     controller: &'a TrainHead,
+    velocity: &'a Velocity,
     wagons: Vec<SavedWagon<'a>>,
 }
 
 #[derive(Deserialize)]
 struct LoadedTrain {
     controller: TrainHead,
+    velocity: Velocity,
     wagons: Vec<LoadedWagon>,
 }
 
@@ -79,47 +87,31 @@ struct LoadedWagon {
 }
 
 /// System to listen to keypresses and load/save the game accordingly
-fn save_system(
-    key_input: Res<Input<KeyCode>>,
-    mut commands: Commands,
-    graph_res: Res<RailGraph>,
-    trains: Query<(Entity, &Children, &TrainHead)>,
-    wagons: Query<(&TrainUnit, &TrainUnitType, &WagonStats)>,
-    train_atlas: Res<TrainAtlas>,
-    rail_atlas: Res<RailAtlas>,
-    rail_root: Query<Entity, With<RailNetworkRoot>>,
-) {
-    let graph = graph_res.as_ref();
+fn save_system(mut world: &mut World) {
+    let key_input = world.resource::<Input<KeyCode>>();
     if key_input.just_pressed(KeyCode::F6) {
-        save_game(graph, trains, wagons);
+        save_game(&mut world);
     } else if key_input.just_pressed(KeyCode::F5) {
-        clean_game(&mut commands, trains, rail_root.single());
-        load_game(&mut commands, train_atlas.as_ref(), rail_atlas.as_ref());
+        clean_game(&mut world);
+        load_game(&mut world);
     }
 }
 
-fn initial_load_system(
-    mut commands: Commands,
-    train_atlas: Res<TrainAtlas>,
-    rail_atlas: Res<RailAtlas>,
-) {
-    load_game(&mut commands, train_atlas.as_ref(), rail_atlas.as_ref());
+fn initial_load_system(world: &mut World) {
+    load_game(world);
 }
 
 /// Helper to save the game
-fn save_game(
-    graph: &RailGraph,
-    trains_query: Query<(Entity, &Children, &TrainHead)>,
-    wagons_query: Query<(&TrainUnit, &TrainUnitType, &WagonStats)>,
-) {
-    info!("Saving game state");
-    // Because of lifetimes I can't easily extract this into a function
+fn save_game(world: &mut World) {
+    let mut trains_query = world.query::<(Entity, &Children, &TrainHead, &Velocity)>();
+    let mut wagons_query = world.query::<(&TrainUnit, &TrainUnitType, &WagonStats)>();
+
     let mut trains = Vec::new();
-    for (_, children, head) in trains_query.iter() {
+    for (_, children, head, velocity) in trains_query.iter(world) {
         // Thanks a lot to https://stackoverflow.com/a/72605922/19331219
         let mut wagons = (0..children.len()).map(|_| None).collect::<Vec<_>>();
         for &child in children.iter() {
-            if let Ok((unit_id, unit_type, unit_stats)) = wagons_query.get(child) {
+            if let Ok((unit_id, unit_type, unit_stats)) = wagons_query.get(world, child) {
                 let wagon = SavedWagon {
                     wagon_type: unit_type,
                     stats: unit_stats,
@@ -131,11 +123,13 @@ fn save_game(
 
         let train = SavedTrain {
             controller: head,
+            velocity: velocity,
             wagons: wagons,
         };
         trains.push(train);
     }
 
+    let graph = world.resource::<RailGraph>();
     let savegame = SavedGame {
         version: CURRENT_SAVEGAME_VERSION,
         network: graph,
@@ -143,17 +137,20 @@ fn save_game(
     };
     let savegame_data = serde_json::to_string(&savegame).expect("Couldn't serialize savegame");
     fs::write(SAVEGAME_PATH, savegame_data).expect("Couldn't write to file");
+    info!("Saved game state");
 }
 
 /// This helper function takes the same query as save and instead despawns relevant entities
-fn clean_game(
-    commands: &mut Commands,
-    trains: Query<(Entity, &Children, &TrainHead)>,
-    rail_root: Entity,
-) {
-    commands.entity(rail_root).despawn_recursive();
-    for (entity, _, _) in trains.iter() {
-        commands.entity(entity).despawn_recursive();
+fn clean_game(world: &mut World) {
+    let mut rail_root = world.query_filtered::<Entity, With<RailNetworkRoot>>();
+    // This iter then collect then iter is possible because, no two matching entites are in hierachical relation.
+    for entity in rail_root.iter(world).collect::<Vec<Entity>>().iter() {
+        world.entity_mut(entity.clone()).despawn_recursive();
+    }
+
+    let mut trains = world.query_filtered::<Entity, With<TrainHead>>();
+    for entity in trains.iter_mut(world).collect::<Vec<Entity>>().iter() {
+        world.entity_mut(entity.clone()).despawn_recursive();
     }
 }
 
@@ -172,15 +169,24 @@ fn load_savegame_file() -> Result<LoadedGame, Box<dyn Error>> {
 }
 
 /// Helper to spawn the dynamic game state from a savegame. Requires the state to be cleaned first.
-fn load_game(commands: &mut Commands, train_atlas: &TrainAtlas, rail_atlas: &RailAtlas) {
-    let savegame = load_savegame_file().unwrap_or_default();
+fn load_game(world: &mut World) {
+    let train_atlas = world.resource::<TrainAtlas>();
+    let rail_atlas = world.resource::<RailAtlas>();
+
+    let savegame = load_savegame_file().unwrap_or_else(|err| {
+        info!("Creating new world, because: {}", err);
+        LoadedGame::default()
+    });
+
+    let mut command_queue = CommandQueue::default();
+    let mut commands = Commands::new(&mut command_queue, world);
 
     // Trains
     for train in savegame.trains {
         let mut wagons = Vec::new();
         for (index, wagon) in train.wagons.into_iter().enumerate() {
             wagons.push(spawn_wagon(
-                commands,
+                &mut commands,
                 train_atlas,
                 wagon.wagon_type,
                 wagon.stats,
@@ -188,12 +194,14 @@ fn load_game(commands: &mut Commands, train_atlas: &TrainAtlas, rail_atlas: &Rai
             ));
         }
 
-        // todo: use helper function
         commands
-            .spawn()
-            .insert_bundle(TransformBundle::default())
-            .insert(Name::new("Train"))
-            .insert(train.controller)
+            .spawn_bundle(TrainBundle {
+                controller: train.controller,
+                velocity: train.velocity,
+                name: Name::new("Loaded Train"),
+                local_transform: Transform::default(),
+                global_transform: GlobalTransform::default(),
+            })
             .push_children(&wagons);
     }
 
@@ -206,9 +214,16 @@ fn load_game(commands: &mut Commands, train_atlas: &TrainAtlas, rail_atlas: &Rai
     for (start, _, edge) in savegame.network.graph.all_edges() {
         if let Some(rail_type) = edge.display_type {
             spawn_rail(
-                commands, rail_atlas, rail_root, start.tile, start.side, rail_type,
+                &mut commands,
+                rail_atlas,
+                rail_root,
+                start.tile,
+                start.side,
+                rail_type,
             );
         }
     }
-    commands.insert_resource(savegame.network);
+
+    command_queue.apply(world);
+    world.insert_resource(savegame.network);
 }

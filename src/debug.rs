@@ -7,7 +7,7 @@ use bevy_prototype_debug_lines::{DebugLines, DebugLinesPlugin};
 use crate::{
     railroad::RailGraph,
     tilemap::{TileCoordinate, TileFace, TILE_SCALE},
-    trains::{TrainHead, TrainUnit},
+    trains::{TrainHead, TrainUnit, Velocity},
 };
 
 pub struct DebugPlugin;
@@ -20,6 +20,7 @@ impl Plugin for DebugPlugin {
                 .register_inspectable::<TileCoordinate>()
                 .register_inspectable::<TrainHead>()
                 .register_inspectable::<TrainUnit>()
+                .register_inspectable::<Velocity>()
                 .add_system(draw_rail_graph);
         }
     }

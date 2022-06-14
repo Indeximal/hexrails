@@ -23,15 +23,16 @@ impl Plugin for TrainPlugin {
             // Todo: move to iyes_loopless instead
             .add_system_set(
                 SystemSet::new()
-                    .with_run_criteria(FixedTimestep::steps_per_second(20.))
-                    .with_system(tick_trains)
-                    .with_system(manual_train_driving),
+                    .with_run_criteria(FixedTimestep::steps_per_second(60.))
+                    .with_system(tick_velocity.before(tick_trains))
+                    .with_system(tick_trains),
             )
             .add_system_set(
                 SystemSet::new()
                     .with_run_criteria(train_builder_condition)
                     .with_system(train_builder),
-            );
+            )
+            .add_system(manual_train_driving);
     }
 }
 
@@ -49,12 +50,12 @@ impl WagonStats {
     fn default_for_type(wagon_type: TrainUnitType) -> Self {
         match wagon_type {
             TrainUnitType::Locomotive => Self {
-                weight: 1000.0,
-                acceleration_power: 10.0,
-                braking_power: 15.0,
+                weight: 25000.0,
+                acceleration_power: 8.0,
+                braking_power: 10.0,
             },
             TrainUnitType::Wagon => Self {
-                weight: 500.0,
+                weight: 5000.0,
                 acceleration_power: 0.0,
                 braking_power: 5.0,
             },
@@ -87,12 +88,48 @@ pub struct TrainHead {
     /// A fractional index into path, where the front of the train is.
     /// Must obey `length + 1 < path_progress <= path.len() - 1` (todo: check)
     pub path_progress: f32,
-    /// Current change of progress per tick. Should be non-negative
-    pub velocity: f32,
     /// Amount of wagons and locomotives. Must be equal to the number of TrainUnit children.
     pub length: u32,
     /// From 0 at the start to len at the destination. Must contain at least two values.
     pub path: Vec<TileFace>,
+}
+
+#[derive(Component, Inspectable, Serialize, Deserialize)]
+pub struct Velocity {
+    /// Current change of progress per tick. Should be non-negative
+    pub velocity: f32,
+    /// Current change of velocity per tick.
+    pub acceleration: f32,
+    /// Velocity will be clamped to this value.
+    pub max_velocity: f32,
+}
+
+#[derive(Bundle)]
+pub struct TrainBundle {
+    pub controller: TrainHead,
+    pub velocity: Velocity,
+
+    /// Currently always "Train" for inspection
+    pub name: Name,
+    /// always default, used for hierarchy
+    pub local_transform: Transform,
+    pub global_transform: GlobalTransform,
+}
+
+impl TrainBundle {
+    fn new(controller: TrainHead, max_velocity: f32) -> Self {
+        Self {
+            controller: controller,
+            velocity: Velocity {
+                velocity: 0.0,
+                acceleration: 0.0,
+                max_velocity: max_velocity,
+            },
+            name: Name::new("Train"),
+            local_transform: Default::default(),
+            global_transform: Default::default(),
+        }
+    }
 }
 
 impl TrainHead {
@@ -137,12 +174,13 @@ pub struct TrainUnit {
     pub position: u32,
 }
 
+/// System to set the acceleration of the player driven train
 fn manual_train_driving(
-    mut train: Query<(&mut TrainHead, &Children), With<PlayerControlledTrain>>,
+    mut train: Query<(&mut Velocity, &Children), With<PlayerControlledTrain>>,
     stats: Query<&WagonStats>,
     input: Res<Input<KeyCode>>,
 ) {
-    if let Ok((mut head, children)) = train.get_single_mut() {
+    for (mut velocity, children) in train.iter_mut() {
         let total_stats = children
             .iter()
             .filter_map(|&id| stats.get(id).ok())
@@ -159,9 +197,7 @@ fn manual_train_driving(
         if acceleration == 0.0 {
             acceleration = -10.0;
         }
-        head.velocity += acceleration / total_stats.weight;
-        // Todo: extract max speed into component
-        head.velocity = head.velocity.clamp(0.0, 1.0);
+        velocity.acceleration = acceleration / total_stats.weight;
     }
 }
 
@@ -258,17 +294,17 @@ fn create_new_train(
         WagonStats::default_for_type(wagon_type),
         0,
     );
+
     commands
-        .spawn()
-        .insert_bundle(TransformBundle::default())
-        .insert(Name::new("Train"))
-        .insert(PlayerControlledTrain)
-        .insert(TrainHead {
-            path: vec![face, next_face],
-            path_progress: 1.0,
-            velocity: 0.01, // todo: remove, this is temporary
-            length: 1,
-        })
+        .spawn_bundle(TrainBundle::new(
+            TrainHead {
+                path: vec![face, next_face],
+                path_progress: 1.0,
+                length: 1,
+            },
+            20. / 60.,
+        ))
+        .insert(PlayerControlledTrain) // todo: actually select this
         .add_child(first_wagon);
 }
 
@@ -325,11 +361,19 @@ pub fn spawn_wagon(
         .id()
 }
 
+/// System to apply acceleration to the velocity
+fn tick_velocity(mut velocities: Query<&mut Velocity>) {
+    for mut velocity in velocities.iter_mut() {
+        velocity.velocity =
+            (velocity.velocity + velocity.acceleration).clamp(0., velocity.max_velocity);
+    }
+}
+
 /// Fixed timestep system to update the progress of the trains
-fn tick_trains(mut trains: Query<&mut TrainHead>, graph_res: Res<RailGraph>) {
+fn tick_trains(mut trains: Query<(&mut TrainHead, &Velocity)>, graph_res: Res<RailGraph>) {
     let graph = graph_res.as_ref();
-    for mut train in trains.iter_mut() {
-        train.path_progress += train.velocity;
+    for (mut train, velocity) in trains.iter_mut() {
+        train.path_progress += velocity.velocity;
         let max_progress = (train.path.len() - 1) as f32;
         if train.path_progress > max_progress {
             // attempt to extend the path if necessary: needed for manual driving
