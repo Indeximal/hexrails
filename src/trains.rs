@@ -27,7 +27,8 @@ impl Plugin for TrainPlugin {
             .add_system(reverse_train_system)
             .add_system_set(
                 SystemSet::on_update(InteractingState::SelectTrain)
-                    .with_system(train_selection_system),
+                    // after, so that acceleration gets cleared properly
+                    .with_system(train_selection_system.after(manual_train_driving)),
             );
     }
 }
@@ -267,13 +268,14 @@ fn reverse_train_system(
 /// This will likely get replace with circle colliders soon
 fn train_selection_system(
     mut commands: Commands,
-    controlled_train: Query<Entity, With<PlayerControlledTrain>>,
+    mut controlled_train: Query<(Entity, &mut Velocity), With<PlayerControlledTrain>>,
     other_trains: Query<(Entity, &TrainHead), Without<PlayerControlledTrain>>,
     mut click_event: EventReader<TileClickEvent>,
 ) {
     // copied from trainbuilder::train_builder
     for ev in click_event.iter() {
-        if let Ok(entity) = controlled_train.get_single() {
+        if let Ok((entity, mut velocity)) = controlled_train.get_single_mut() {
+            velocity.acceleration = 0.0;
             commands.entity(entity).remove::<PlayerControlledTrain>();
         }
 
