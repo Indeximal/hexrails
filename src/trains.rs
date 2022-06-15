@@ -24,7 +24,8 @@ impl Plugin for TrainPlugin {
                     .with_system(tick_trains),
             )
             .add_system(manual_train_driving)
-            .add_system(auto_extend_train_path);
+            .add_system(auto_extend_train_path)
+            .add_system(reverse_train_system);
     }
 }
 
@@ -84,6 +85,15 @@ pub struct TrainHead {
     pub length: u32,
     /// From 0 at the start to len at the destination. Must contain at least two values.
     pub path: Vec<TileFace>,
+}
+
+impl TrainHead {
+    /// Shortens the path to not contain any extra tiles in front
+    pub fn trim_front(&mut self) {
+        while self.path.len() as f32 > self.path_progress + 2.0 {
+            self.path.pop();
+        }
+    }
 }
 
 #[derive(Component, Inspectable, Serialize, Deserialize)]
@@ -212,6 +222,40 @@ fn auto_extend_train_path(
                     train.path.remove(0);
                     train.path_progress -= 1.;
                 }
+            }
+        }
+    }
+}
+
+/// System to reverse a whole train
+fn reverse_train_system(
+    mut trains: Query<(&mut TrainHead, &Velocity, &Children), With<PlayerControlledTrain>>,
+    mut wagons: Query<&mut TrainUnit>,
+    input: Res<Input<KeyCode>>,
+) {
+    if !input.just_pressed(KeyCode::R) {
+        return;
+    }
+    for (mut controller, velocity, children) in trains.iter_mut() {
+        if velocity.velocity != 0. {
+            info!("Cannot reverse moving train!");
+            continue;
+        }
+        // Reverse the path and use reversed edges
+        controller.path.reverse();
+        for d in controller.path.iter_mut() {
+            *d = d.opposite();
+        }
+        controller.path_progress =
+            controller.path.len() as f32 - controller.path_progress + controller.length as f32 - 1.;
+
+        // Allow the player to steer
+        controller.trim_front();
+
+        // Reverse the wagon indices
+        for &x in children.iter() {
+            if let Ok(mut wagon) = wagons.get_mut(x) {
+                wagon.position = controller.length - wagon.position - 1;
             }
         }
     }
