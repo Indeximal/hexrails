@@ -59,6 +59,7 @@ fn spawn_camera(mut commands: Commands) {
     camera.orthographic_projection.bottom = -1.0;
     camera.orthographic_projection.left = ASPECT_RATIO * -1.0;
     camera.orthographic_projection.right = ASPECT_RATIO * 1.0;
+    camera.orthographic_projection.scale = 3.0;
     camera.orthographic_projection.scaling_mode = ScalingMode::FixedVertical;
     commands.spawn_bundle(camera).insert(FlyCamera2d::default());
 }
@@ -73,7 +74,7 @@ impl Default for FlyCamera2d {
             velocity: Vec2::ZERO,
             zoom_speed: 0.7,
             min_zoom: 1.0,
-            max_zoom: 10.0,
+            max_zoom: 12.0,
             key_left: KeyCode::A,
             key_right: KeyCode::D,
             key_up: KeyCode::W,

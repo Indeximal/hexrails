@@ -7,16 +7,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     railroad::{RailGraph, RailType},
-    tilemap::TileFace,
+    tilemap::{TileClickEvent, TileFace},
+    ui::InteractingState,
 };
 
 pub struct TrainPlugin;
 
 impl Plugin for TrainPlugin {
     fn build(&self, app: &mut App) {
-        // Todo: don't rely on stages. Even possible because of Commands dependencies?
         app.add_system_to_stage(CoreStage::PostUpdate, position_train_units)
-            // Todo: move to iyes_loopless instead
             .add_system_set(
                 SystemSet::new()
                     .with_run_criteria(FixedTimestep::steps_per_second(60.))
@@ -25,7 +24,11 @@ impl Plugin for TrainPlugin {
             )
             .add_system(manual_train_driving)
             .add_system(auto_extend_train_path)
-            .add_system(reverse_train_system);
+            .add_system(reverse_train_system)
+            .add_system_set(
+                SystemSet::on_update(InteractingState::SelectTrain)
+                    .with_system(train_selection_system),
+            );
     }
 }
 
@@ -195,7 +198,6 @@ fn auto_extend_train_path(
         // todo: does this put a hard limit on the velocity of player controlled trains?
         // The 0.5 anticipates the future
         if train.path_progress + 0.5 > max_progress {
-            // todo: shrink path, so last in path is always imminent
             let path_end = train
                 .path
                 .last()
@@ -227,7 +229,7 @@ fn auto_extend_train_path(
     }
 }
 
-/// System to reverse a whole train
+/// System to reverse a whole train on key press
 fn reverse_train_system(
     mut trains: Query<(&mut TrainHead, &Velocity, &Children), With<PlayerControlledTrain>>,
     mut wagons: Query<&mut TrainUnit>,
@@ -258,6 +260,41 @@ fn reverse_train_system(
                 wagon.position = controller.length - wagon.position - 1;
             }
         }
+    }
+}
+
+/// System to enter and exit trains on click
+/// This will likely get replace with circle colliders soon
+fn train_selection_system(
+    mut commands: Commands,
+    controlled_train: Query<Entity, With<PlayerControlledTrain>>,
+    other_trains: Query<(Entity, &TrainHead), Without<PlayerControlledTrain>>,
+    mut click_event: EventReader<TileClickEvent>,
+) {
+    // copied from trainbuilder::train_builder
+    for ev in click_event.iter() {
+        if let Ok(entity) = controlled_train.get_single() {
+            commands.entity(entity).remove::<PlayerControlledTrain>();
+        }
+
+        if ev.side.is_none() {
+            continue;
+        }
+        let face = TileFace {
+            tile: ev.coord,
+            side: ev.side.unwrap(),
+        };
+
+        for (entity, train) in other_trains.iter() {
+            // this might behave weird when clicking on long paths, but it should
+            // be fine, since this is temporary.
+            if train.path.contains(&face) {
+                info!("Selected train");
+                commands.entity(entity).insert(PlayerControlledTrain);
+                break;
+            }
+        }
+        break;
     }
 }
 

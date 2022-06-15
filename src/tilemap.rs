@@ -116,7 +116,7 @@ impl TileFace {
     pub fn into_world_position(self) -> Vec2 {
         let origin = self.tile.into_world_pos();
         let angle = self.side.to_angle();
-        let offset = Vec2::new(angle.cos(), angle.sin()) * TILE_SCALE / 2.;
+        let offset = Vec2::new(angle.cos(), angle.sin()) * TILE_SCALE / 2. * SQRT3_HALF;
         origin + offset
     }
 }

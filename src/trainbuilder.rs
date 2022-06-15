@@ -24,7 +24,6 @@ impl TrainHead {
     pub fn index_for_tile(&self, face: TileFace) -> Option<u32> {
         if self.path_progress - self.length as f32 <= 1. {
             // no space for a new wagon
-            // todo: extend path instead ?
             return None;
         }
         let path_index = self.path.iter().position(|&f| f == face)? as f32;
@@ -151,7 +150,6 @@ fn create_new_train(
             },
             20. / 60.,
         ))
-        .insert(PlayerControlledTrain) // todo: actually select this
         .add_child(first_wagon);
 }
 
@@ -217,12 +215,13 @@ fn load_texture_atlas(
     mut texture_atlas: ResMut<Assets<TextureAtlas>>,
 ) {
     let image = asset_server.load("TrainAtlas.png");
+    // This assumes there is no padding at the very edges, thus the + 2 is a hotfix for that.
     let atlas = TextureAtlas::from_grid_with_padding(
         image,
-        Vec2::new(TILE_SIZE, TILE_SIZE),
+        Vec2::new(TILE_SIZE + 2., TILE_SIZE + 2.),
         1,
         2,
-        Vec2::splat(1.0),
+        Vec2::splat(0.0),
     );
     let atlas_handle = texture_atlas.add(atlas);
     commands.insert_resource(TrainAtlas(atlas_handle));

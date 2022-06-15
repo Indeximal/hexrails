@@ -21,6 +21,7 @@ pub enum InteractingState {
     None,
     PlaceRails(RailType),
     PlaceTrains(TrainUnitType),
+    SelectTrain,
 }
 
 fn button_hightlighting(
@@ -115,6 +116,7 @@ fn build_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                     InteractingState::PlaceTrains(TrainUnitType::Wagon),
                     "ui/icon_wagon.png",
                 ),
+                (InteractingState::SelectTrain, "ui/icon_drive.png"),
             ] {
                 parent
                     .spawn_bundle(ButtonBundle {

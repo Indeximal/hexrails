@@ -42,7 +42,7 @@ fn spawn_tiles(
     root_query: Query<Entity, With<TerrainRoot>>,
 ) {
     let root_entity = root_query.single();
-    const RADIUS: i32 = 3;
+    const RADIUS: i32 = 20;
     for y in -RADIUS..=RADIUS {
         for x in if y >= 0 {
             -RADIUS..=(RADIUS - y)
