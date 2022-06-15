@@ -104,11 +104,20 @@ pub struct TileFace {
 }
 
 impl TileFace {
+    /// Returns the TileFace representing the same grid edge, but in the opposite direction
     pub fn opposite(&self) -> TileFace {
         TileFace {
             tile: self.tile.neighbor(self.side),
             side: self.side.opposite(),
         }
+    }
+
+    /// Returns the world position of the center of the grid edge that this face represents
+    pub fn into_world_position(self) -> Vec2 {
+        let origin = self.tile.into_world_pos();
+        let angle = self.side.to_angle();
+        let offset = Vec2::new(angle.cos(), angle.sin()) * TILE_SCALE / 2.;
+        origin + offset
     }
 }
 

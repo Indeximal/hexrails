@@ -5,6 +5,7 @@ use railroad::RailRoadPlugin;
 use savegame::LoadSavePlugin;
 use terrain::TerrainPlugin;
 use tilemap::TileMapPlugin;
+use trainbuilder::TrainBuildingPlugin;
 use trains::TrainPlugin;
 use ui::UIOverlayPlugin;
 
@@ -14,6 +15,7 @@ mod railroad;
 mod savegame;
 mod terrain;
 mod tilemap;
+mod trainbuilder;
 mod trains;
 mod ui;
 
@@ -42,6 +44,7 @@ fn main() {
         .add_plugin(LoadSavePlugin)
         .add_plugin(TrainPlugin)
         .add_plugin(UIOverlayPlugin)
+        .add_plugin(TrainBuildingPlugin)
         .run();
 }
 

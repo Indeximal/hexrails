@@ -6,10 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     railroad::{spawn_rail, RailAtlas, RailGraph, RailNetworkRoot},
-    trains::{
-        spawn_wagon, TrainAtlas, TrainBundle, TrainHead, TrainUnit, TrainUnitType, Velocity,
-        WagonStats,
-    },
+    trainbuilder::*,
+    trains::*,
 };
 
 const SAVEGAME_PATH: &str = "savegame/stupid.json";
