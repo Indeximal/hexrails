@@ -28,9 +28,9 @@ pub struct RailGraph {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct RailEdge {
-    /// Either None if it should not be rendered or Some(RailType) with the type
-    /// of the sprite it should render as
-    pub display_type: Option<RailType>,
+    /// Type of the rail
+    pub rail_type: RailType,
+    pub should_render: bool,
 }
 
 #[derive(Component)]
@@ -41,6 +41,16 @@ pub enum RailType {
     Straight,
     CurvedLeft,
     CurvedRight,
+}
+
+impl RailType {
+    pub fn mirror(&self) -> Self {
+        match self {
+            RailType::Straight => RailType::Straight,
+            RailType::CurvedLeft => RailType::CurvedRight,
+            RailType::CurvedRight => RailType::CurvedLeft,
+        }
+    }
 }
 
 impl TileFace {
@@ -125,13 +135,17 @@ fn build_rail(
         start_face,
         end_face,
         RailEdge {
-            display_type: Some(rail_type),
+            rail_type: rail_type,
+            should_render: true,
         },
     );
     let edge2 = rail_graph.graph.add_edge(
         end_face.opposite(),
         start_face.opposite(),
-        RailEdge { display_type: None },
+        RailEdge {
+            rail_type: rail_type.mirror(),
+            should_render: false,
+        },
     );
     // if neither edge previously existed:
     if edge1.is_none() && edge2.is_none() {

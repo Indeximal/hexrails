@@ -5,7 +5,10 @@ use bevy_inspector_egui::Inspectable;
 use petgraph::EdgeDirection;
 use serde::{Deserialize, Serialize};
 
-use crate::{railroad::RailGraph, tilemap::TileFace};
+use crate::{
+    railroad::{RailGraph, RailType},
+    tilemap::TileFace,
+};
 
 pub struct TrainPlugin;
 
@@ -20,7 +23,8 @@ impl Plugin for TrainPlugin {
                     .with_system(tick_velocity.before(tick_trains))
                     .with_system(tick_trains),
             )
-            .add_system(manual_train_driving);
+            .add_system(manual_train_driving)
+            .add_system(auto_extend_train_path);
     }
 }
 
@@ -159,6 +163,60 @@ fn manual_train_driving(
     }
 }
 
+/// System to extend the path of trains if necessary. Useful mosty for manual driving.
+fn auto_extend_train_path(
+    mut trains: Query<(&mut TrainHead, Option<&PlayerControlledTrain>)>,
+    input: Res<Input<KeyCode>>,
+    graph_res: Res<RailGraph>,
+) {
+    let graph = &graph_res.graph;
+    let preferrs_left = input.pressed(KeyCode::Left);
+    let preferrs_right = input.pressed(KeyCode::Right);
+    let preferred_direction = if preferrs_left == preferrs_right {
+        RailType::Straight
+    } else if preferrs_left {
+        RailType::CurvedLeft
+    } else {
+        RailType::CurvedRight
+    };
+
+    for (mut train, is_player_controlled) in trains.iter_mut() {
+        let max_progress = (train.path.len() - 1) as f32;
+        // todo: does this put a hard limit on the velocity of player controlled trains?
+        // The 0.5 anticipates the future
+        if train.path_progress + 0.5 > max_progress {
+            // todo: shrink path, so last in path is always imminent
+            let path_end = train
+                .path
+                .last()
+                .expect("TrainHead::path invariant broken: contains no elements")
+                .clone();
+            let mut next_tile = None;
+            graph
+                .edges_directed(path_end, EdgeDirection::Outgoing)
+                .for_each(|(_, next, edge)| {
+                    // Prefer input direction, if this train is steered by a player
+                    if is_player_controlled.is_some() && edge.rail_type == preferred_direction {
+                        next_tile = Some(next);
+                    } else if next_tile.is_none() {
+                        next_tile = Some(next);
+                    }
+                });
+
+            if let Some(next_tile) = next_tile {
+                train.path.push(next_tile);
+                if train.path.len() >= train.length as usize + 5 {
+                    // The remove operation is there to stop the path from growing continiously.
+                    // But it does use O(n) time, but since n should stay constant this way, this
+                    // is fine.
+                    train.path.remove(0);
+                    train.path_progress -= 1.;
+                }
+            }
+        }
+    }
+}
+
 /// System to apply acceleration to the velocity
 fn tick_velocity(mut velocities: Query<&mut Velocity>) {
     for mut velocity in velocities.iter_mut() {
@@ -166,38 +224,10 @@ fn tick_velocity(mut velocities: Query<&mut Velocity>) {
             (velocity.velocity + velocity.acceleration).clamp(0., velocity.max_velocity);
     }
 }
-
 /// Fixed timestep system to update the progress of the trains
-fn tick_trains(mut trains: Query<(&mut TrainHead, &Velocity)>, graph_res: Res<RailGraph>) {
-    let graph = graph_res.as_ref();
+fn tick_trains(mut trains: Query<(&mut TrainHead, &Velocity)>) {
     for (mut train, velocity) in trains.iter_mut() {
         train.path_progress += velocity.velocity;
-        let max_progress = (train.path.len() - 1) as f32;
-        if train.path_progress > max_progress {
-            // attempt to extend the path if necessary: needed for manual driving
-            graph
-                .graph
-                .neighbors_directed(
-                    train
-                        .path
-                        .last()
-                        .expect("TrainHead::path invariant broken!")
-                        .clone(),
-                    EdgeDirection::Outgoing,
-                )
-                .any(|a| {
-                    // Todo: implement steering
-                    if train.path.len() >= train.length as usize + 5 {
-                        // The remove operation is there to stop the path from growing continiously.
-                        // But it does use O(n) time, but since n should stay constant this way, this
-                        // is fine.
-                        train.path.remove(0);
-                        train.path_progress -= 1.;
-                    }
-                    train.path.push(a);
-                    true // shortcircuit
-                });
-        }
         train.path_progress = train.path_progress.clamp(0., (train.path.len() - 1) as f32);
     }
 }

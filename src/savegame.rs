@@ -11,7 +11,7 @@ use crate::{
 };
 
 const SAVEGAME_PATH: &str = "savegame/stupid.json";
-const CURRENT_SAVEGAME_VERSION: u32 = 4;
+const CURRENT_SAVEGAME_VERSION: u32 = 5;
 
 pub struct LoadSavePlugin;
 
@@ -210,14 +210,14 @@ fn load_game(world: &mut World) {
         .insert(Name::new("Rail Network"))
         .id();
     for (start, _, edge) in savegame.network.graph.all_edges() {
-        if let Some(rail_type) = edge.display_type {
+        if edge.should_render {
             spawn_rail(
                 &mut commands,
                 rail_atlas,
                 rail_root,
                 start.tile,
                 start.side,
-                rail_type,
+                edge.rail_type,
             );
         }
     }
