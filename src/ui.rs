@@ -25,7 +25,7 @@ pub enum InteractingState {
 }
 
 fn button_hightlighting(
-    mut button_query: Query<(&mut UiColor, &InteractingStateTarget), With<Button>>,
+    mut button_query: Query<(&mut BackgroundColor, &InteractingStateTarget), With<Button>>,
     state: Res<State<InteractingState>>,
 ) {
     // Todo: this seems bad, maybe change?
@@ -76,7 +76,7 @@ fn build_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     };
 
     commands
-        .spawn_bundle(NodeBundle {
+        .spawn(NodeBundle {
             style: Style {
                 size: Size::new(Val::Percent(50.), Val::Percent(12.)),
                 margin: UiRect {
@@ -88,7 +88,6 @@ fn build_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                 justify_content: JustifyContent::SpaceAround,
                 ..default()
             },
-            color: Color::NONE.into(),
             ..default()
         })
         .insert(Name::new("UI"))
@@ -117,7 +116,7 @@ fn build_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                 (InteractingState::SelectTrain, "ui/icon_drive.png"),
             ] {
                 parent
-                    .spawn_bundle(ButtonBundle {
+                    .spawn(ButtonBundle {
                         style: button_style.clone(),
                         image: asset_server.load(icon).into(),
                         focus_policy: FocusPolicy::Block,

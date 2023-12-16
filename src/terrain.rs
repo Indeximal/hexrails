@@ -30,7 +30,7 @@ struct Tile {}
 /// This system spawns the root node for all the terrain sprites, useful mostly for inspecting.
 fn spawn_terrain_root(mut commands: Commands) {
     commands
-        .spawn_bundle(SpatialBundle::default())
+        .spawn(SpatialBundle::default())
         .insert(TerrainRoot)
         .insert(Name::new("Terrain"));
 }
@@ -79,7 +79,7 @@ fn spawn_terrain_tile(
     sprite.custom_size = Some(Vec2::splat(TILE_SCALE));
 
     let child = commands
-        .spawn_bundle(SpriteSheetBundle {
+        .spawn(SpriteSheetBundle {
             sprite: sprite,
             texture_atlas: atlas.0.clone(),
             transform: Transform {
@@ -96,6 +96,7 @@ fn spawn_terrain_tile(
     commands.entity(root_entity).add_child(child);
 }
 
+#[derive(Resource)]
 struct TerrainAtlas(Handle<TextureAtlas>);
 
 /// System to load the sprite sheet
@@ -105,13 +106,13 @@ fn load_texture_atlas(
     mut texture_atlas: ResMut<Assets<TextureAtlas>>,
 ) {
     let image = asset_server.load("TerrainAtlas.png");
-    let atlas = TextureAtlas::from_grid_with_padding(
+    let atlas = TextureAtlas::from_grid(
         image,
         Vec2::new(TILE_SIZE, TILE_SIZE),
         1,
         2,
-        Vec2::splat(2.0),
-        Vec2::splat(1.0),
+        Some(Vec2::splat(2.0)),
+        Some(Vec2::splat(1.0)),
     );
     let atlas_handle = texture_atlas.add(atlas);
     commands.insert_resource(TerrainAtlas(atlas_handle));

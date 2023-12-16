@@ -17,11 +17,8 @@ pub struct LoadSavePlugin;
 
 impl Plugin for LoadSavePlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system_to_stage(
-            StartupStage::PostStartup,
-            initial_load_system.exclusive_system(),
-        )
-        .add_system(save_system.exclusive_system());
+        app.add_startup_system_to_stage(StartupStage::PostStartup, initial_load_system)
+            .add_system(save_system);
     }
 }
 
@@ -193,7 +190,7 @@ fn load_game(world: &mut World) {
         }
 
         commands
-            .spawn_bundle(TrainBundle {
+            .spawn(TrainBundle {
                 controller: train.controller,
                 velocity: train.velocity,
                 name: Name::new("Loaded Train"),
@@ -207,7 +204,7 @@ fn load_game(world: &mut World) {
 
     // Rails
     let rail_root = commands
-        .spawn_bundle(SpatialBundle::default())
+        .spawn(SpatialBundle::default())
         .insert(RailNetworkRoot)
         .insert(Name::new("Rail Network"))
         .id();

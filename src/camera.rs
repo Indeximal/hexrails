@@ -62,7 +62,7 @@ fn spawn_camera(mut commands: Commands) {
     camera.projection.right = ASPECT_RATIO * 1.0;
     camera.projection.scale = 3.0;
     camera.projection.scaling_mode = ScalingMode::None;
-    commands.spawn_bundle(camera).insert(FlyCamera2d::default());
+    commands.spawn(camera).insert(FlyCamera2d::default());
 }
 
 impl Default for FlyCamera2d {

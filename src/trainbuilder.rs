@@ -142,7 +142,7 @@ fn create_new_train(
     );
 
     commands
-        .spawn_bundle(TrainBundle::new(
+        .spawn(TrainBundle::new(
             TrainHead {
                 path: vec![face, next_face],
                 path_progress: 1.0,
@@ -150,7 +150,7 @@ fn create_new_train(
             },
             20. / 60.,
         ))
-        .insert_bundle(VisibilityBundle::default())
+        .insert(VisibilityBundle::default())
         .add_child(first_wagon);
 }
 
@@ -192,7 +192,7 @@ pub fn spawn_wagon(
     sprite.custom_size = Some(Vec2::splat(TILE_SCALE));
 
     commands
-        .spawn_bundle(SpriteSheetBundle {
+        .spawn(SpriteSheetBundle {
             sprite: sprite,
             texture_atlas: atlas.0.clone(),
             transform: Transform::from_translation(Vec3::Z * Z_LAYER_TRAINS),
@@ -207,6 +207,7 @@ pub fn spawn_wagon(
         .id()
 }
 
+#[derive(Resource)]
 pub struct TrainAtlas(Handle<TextureAtlas>);
 
 /// System to load the sprite sheet
@@ -216,13 +217,13 @@ fn load_texture_atlas(
     mut texture_atlas: ResMut<Assets<TextureAtlas>>,
 ) {
     let image = asset_server.load("TrainAtlas.png");
-    let atlas = TextureAtlas::from_grid_with_padding(
+    let atlas = TextureAtlas::from_grid(
         image,
         Vec2::new(TILE_SIZE, TILE_SIZE),
         1,
         2,
-        Vec2::splat(2.0),
-        Vec2::splat(1.0), // There is padding at the very edges (?)
+        Some(Vec2::splat(2.0)),
+        Some(Vec2::splat(1.0)), // There is padding at the very edges (?)
     );
     let atlas_handle = texture_atlas.add(atlas);
     commands.insert_resource(TrainAtlas(atlas_handle));

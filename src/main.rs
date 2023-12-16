@@ -26,16 +26,18 @@ fn main() {
     let height = 900.0;
     App::new()
         .insert_resource(ClearColor(BG_COLOR))
-        .insert_resource(WindowDescriptor {
-            width: height * ASPECT_RATIO,
-            height: height,
-            title: "Hex Rails".to_string(),
-            present_mode: bevy::window::PresentMode::Fifo,
-            resizable: false,
-            ..Default::default()
-        })
         .add_startup_system(print_version)
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            window: WindowDescriptor {
+                width: height * ASPECT_RATIO,
+                height: height,
+                title: "Hex Rails".to_string(),
+                present_mode: bevy::window::PresentMode::Fifo,
+                resizable: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        }))
         // .add_plugin(DebugPlugin)
         .add_plugin(TerrainPlugin)
         .add_plugin(TileMapPlugin)

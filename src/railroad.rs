@@ -21,7 +21,7 @@ impl Plugin for RailRoadPlugin {
 #[derive(Component)]
 pub struct RailNetworkRoot;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Resource)]
 pub struct RailGraph {
     pub graph: DiGraphMap<TileFace, RailEdge>,
 }
@@ -185,7 +185,7 @@ pub fn spawn_rail(
     sprite.flip_y = flipped;
 
     let child = commands
-        .spawn_bundle(SpriteSheetBundle {
+        .spawn(SpriteSheetBundle {
             sprite: sprite,
             texture_atlas: atlas.0.clone(),
             transform: Transform {
@@ -203,6 +203,7 @@ pub fn spawn_rail(
     commands.entity(root_entity).add_child(child);
 }
 
+#[derive(Resource)]
 pub struct RailAtlas(Handle<TextureAtlas>);
 
 /// This system loads the sprite atlas for the rails
@@ -212,13 +213,13 @@ fn load_texture_atlas(
     mut texture_atlas: ResMut<Assets<TextureAtlas>>,
 ) {
     let image = asset_server.load("RailAtlas.png");
-    let atlas = TextureAtlas::from_grid_with_padding(
+    let atlas = TextureAtlas::from_grid(
         image,
         Vec2::new(TILE_SIZE, TILE_SIZE),
         1,
         2,
-        Vec2::splat(2.0),
-        Vec2::splat(1.0),
+        Some(Vec2::splat(2.0)),
+        Some(Vec2::splat(1.0)),
     );
     let atlas_handle = texture_atlas.add(atlas);
     commands.insert_resource(RailAtlas(atlas_handle));
