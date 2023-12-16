@@ -1,7 +1,7 @@
 use std::{f32::consts::PI, ops::Add};
 
 use bevy::{core::FixedTimestep, prelude::*};
-use bevy_inspector_egui::Inspectable;
+// use bevy_inspector_egui::Inspectable;
 use petgraph::EdgeDirection;
 use serde::{Deserialize, Serialize};
 
@@ -36,7 +36,7 @@ impl Plugin for TrainPlugin {
 #[derive(Component)]
 pub struct PlayerControlledTrain;
 
-#[derive(Component, Inspectable, Serialize, Deserialize)]
+#[derive(Component, Serialize, Deserialize)]
 pub struct WagonStats {
     pub weight: f32,
     pub acceleration_power: f32,
@@ -80,7 +80,7 @@ impl Add<&WagonStats> for WagonStats {
     }
 }
 
-#[derive(Component, Inspectable, Serialize, Deserialize)]
+#[derive(Component, Serialize, Deserialize)]
 pub struct TrainHead {
     /// A fractional index into path, where the front of the train is.
     /// Must obey `length + 1 < path_progress <= path.len() - 1` (todo: check)
@@ -100,7 +100,7 @@ impl TrainHead {
     }
 }
 
-#[derive(Component, Inspectable, Serialize, Deserialize)]
+#[derive(Component, Serialize, Deserialize)]
 pub struct Velocity {
     /// Current change of progress per tick. Should be non-negative
     pub velocity: f32,
@@ -144,7 +144,7 @@ pub enum TrainUnitType {
     Wagon,
 }
 
-#[derive(Component, Inspectable)]
+#[derive(Component)]
 pub struct TrainUnit {
     /// Starting with 0, this is subtracted from the path progress
     pub position: u32,

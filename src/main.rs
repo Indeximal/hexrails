@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use camera::MovingCameraPlugin;
-use debug::DebugPlugin;
+// use debug::DebugPlugin;
 use railroad::RailRoadPlugin;
 use savegame::LoadSavePlugin;
 use terrain::TerrainPlugin;
@@ -10,7 +10,7 @@ use trains::TrainPlugin;
 use ui::UIOverlayPlugin;
 
 mod camera;
-mod debug;
+// mod debug;
 mod railroad;
 mod savegame;
 mod terrain;
@@ -36,7 +36,7 @@ fn main() {
         })
         .add_startup_system(print_version)
         .add_plugins(DefaultPlugins)
-        .add_plugin(DebugPlugin)
+        // .add_plugin(DebugPlugin)
         .add_plugin(TerrainPlugin)
         .add_plugin(TileMapPlugin)
         .add_plugin(RailRoadPlugin)

@@ -1,3 +1,5 @@
+//! This module is unmaintained for now.
+
 use std::f32::consts::PI;
 
 use bevy::prelude::*;

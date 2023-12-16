@@ -2,7 +2,7 @@ use core::fmt;
 use std::f32::consts::PI;
 
 use bevy::prelude::*;
-use bevy_inspector_egui::{bevy_egui::EguiContext, Inspectable};
+// use bevy_inspector_egui::{bevy_egui::EguiContext, Inspectable};
 use serde::{Deserialize, Serialize};
 
 use crate::camera::{current_cursor_world_pos, FlyCamera2d};
@@ -27,9 +27,7 @@ pub struct TileClickEvent {
 
 /// These are the six direction of the hexagonal grid. The value of each direction
 /// are equivalent to sixths of a counterclockwise turn starting at the positive x direction.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Inspectable,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct TileSide(u8);
 
 impl TileSide {
@@ -77,27 +75,14 @@ impl TileSide {
 }
 
 #[derive(
-    Component,
-    Inspectable,
-    Debug,
-    Clone,
-    Copy,
-    Hash,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Serialize,
-    Deserialize,
+    Component, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
 )]
 pub struct TileCoordinate(pub i32, pub i32);
 
 /// This is the face of the tile at coordinate `tile` facing *from* `side`.
 /// e.g (0, 0) EAST is the right part of the origin tile, but when used as an
 /// coordinate for a rail this rail is going east to west (or south/north-west).
-#[derive(
-    Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Serialize, Deserialize, Inspectable,
-)]
+#[derive(Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct TileFace {
     pub tile: TileCoordinate,
     pub side: TileSide,
@@ -206,13 +191,13 @@ fn mouse_button_events(
     mut click_event: EventWriter<TileClickEvent>,
     windows: Res<Windows>,
     cam: Query<(&Transform, &OrthographicProjection), With<FlyCamera2d>>,
-    mut egui_context: ResMut<EguiContext>,
+    // mut egui_context: ResMut<EguiContext>,
     other_buttons: Query<&Interaction>,
 ) {
     // Skip if the mouse is above a inspector window or other gui
-    if egui_context.ctx_mut().wants_pointer_input() {
-        return;
-    }
+    // if egui_context.ctx_mut().wants_pointer_input() {
+    //     return;
+    // }
     // todo: fix, this doesn't work yet
     if other_buttons
         .iter()
