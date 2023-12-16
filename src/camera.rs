@@ -53,14 +53,15 @@ pub struct FlyCamera2d {
 }
 
 fn spawn_camera(mut commands: Commands) {
-    let mut camera = OrthographicCameraBundle::new_2d();
+    // allow Z layer between 0 and 1
+    let mut camera = Camera2dBundle::new_with_far(2.0);
 
-    camera.orthographic_projection.top = 1.0;
-    camera.orthographic_projection.bottom = -1.0;
-    camera.orthographic_projection.left = ASPECT_RATIO * -1.0;
-    camera.orthographic_projection.right = ASPECT_RATIO * 1.0;
-    camera.orthographic_projection.scale = 3.0;
-    camera.orthographic_projection.scaling_mode = ScalingMode::FixedVertical;
+    camera.projection.top = 1.0;
+    camera.projection.bottom = -1.0;
+    camera.projection.left = ASPECT_RATIO * -1.0;
+    camera.projection.right = ASPECT_RATIO * 1.0;
+    camera.projection.scale = 3.0;
+    camera.projection.scaling_mode = ScalingMode::None;
     commands.spawn_bundle(camera).insert(FlyCamera2d::default());
 }
 

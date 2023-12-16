@@ -70,8 +70,6 @@ fn button_system(
 
 /// System to create the UI on startup
 fn build_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn_bundle(UiCameraBundle::default());
-
     let button_style = Style {
         size: Size::new(Val::Percent(100.), Val::Percent(100.)),
         ..default()
@@ -81,7 +79,7 @@ fn build_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
         .spawn_bundle(NodeBundle {
             style: Style {
                 size: Size::new(Val::Percent(50.), Val::Percent(12.)),
-                margin: Rect {
+                margin: UiRect {
                     left: Val::Auto,
                     right: Val::Auto,
                     top: Val::Auto,

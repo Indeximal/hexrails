@@ -150,6 +150,7 @@ fn create_new_train(
             },
             20. / 60.,
         ))
+        .insert_bundle(VisibilityBundle::default())
         .add_child(first_wagon);
 }
 
@@ -215,13 +216,13 @@ fn load_texture_atlas(
     mut texture_atlas: ResMut<Assets<TextureAtlas>>,
 ) {
     let image = asset_server.load("TrainAtlas.png");
-    // This assumes there is no padding at the very edges, thus the + 2 is a hotfix for that.
     let atlas = TextureAtlas::from_grid_with_padding(
         image,
-        Vec2::new(TILE_SIZE + 2., TILE_SIZE + 2.),
+        Vec2::new(TILE_SIZE, TILE_SIZE),
         1,
         2,
-        Vec2::splat(0.0),
+        Vec2::splat(2.0),
+        Vec2::splat(1.0), // There is padding at the very edges (?)
     );
     let atlas_handle = texture_atlas.add(atlas);
     commands.insert_resource(TrainAtlas(atlas_handle));

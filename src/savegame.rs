@@ -199,13 +199,15 @@ fn load_game(world: &mut World) {
                 name: Name::new("Loaded Train"),
                 local_transform: Transform::default(),
                 global_transform: GlobalTransform::default(),
+                visiblity: Visibility::default(),
+                cvisiblity: Default::default(),
             })
             .push_children(&wagons);
     }
 
     // Rails
     let rail_root = commands
-        .spawn_bundle(TransformBundle::default())
+        .spawn_bundle(SpatialBundle::default())
         .insert(RailNetworkRoot)
         .insert(Name::new("Rail Network"))
         .id();

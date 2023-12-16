@@ -217,6 +217,7 @@ fn load_texture_atlas(
         Vec2::new(TILE_SIZE, TILE_SIZE),
         1,
         2,
+        Vec2::splat(2.0),
         Vec2::splat(1.0),
     );
     let atlas_handle = texture_atlas.add(atlas);

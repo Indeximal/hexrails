@@ -1,6 +1,7 @@
 use std::{f32::consts::PI, ops::Add};
 
-use bevy::{core::FixedTimestep, prelude::*};
+use bevy::prelude::*;
+use bevy::time::FixedTimestep;
 // use bevy_inspector_egui::Inspectable;
 use petgraph::EdgeDirection;
 use serde::{Deserialize, Serialize};
@@ -120,6 +121,8 @@ pub struct TrainBundle {
     /// always default, used for hierarchy
     pub local_transform: Transform,
     pub global_transform: GlobalTransform,
+    pub visiblity: Visibility,
+    pub cvisiblity: ComputedVisibility,
 }
 
 impl TrainBundle {
@@ -134,6 +137,8 @@ impl TrainBundle {
             name: Name::new("Train"),
             local_transform: Default::default(),
             global_transform: Default::default(),
+            visiblity: Default::default(),
+            cvisiblity: Default::default(),
         }
     }
 }
@@ -323,7 +328,7 @@ fn position_train_units(
 ) {
     for (parent, mut transform, unit) in train_wagons.iter_mut() {
         let head = trains
-            .get(parent.0)
+            .get(parent.get())
             .expect("Train Unit did not have a Train Head as a Parent");
 
         let progress = head.path_progress - unit.position as f32;
