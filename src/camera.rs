@@ -1,4 +1,13 @@
-use bevy::{input::mouse::MouseWheel, prelude::*, render::camera::ScalingMode};
+//! This module provides a draggable, zoomable, keyboard moveable camera.
+//!
+//! Mostly copy pasted code + using [`bevy_pancam`] for the zoom and drag functionality.
+//!
+//! <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd> or <kbd>MMB</kbd>/<kbd>RMB</kbd> to move the camera.
+//! Scroll to zoom in/out.
+
+use bevy::prelude::*;
+use bevy::render::camera::ScalingMode;
+use bevy_pancam::{PanCam, PanCamPlugin};
 // use bevy_inspector_egui::bevy_egui::EguiContext;
 
 use crate::ASPECT_RATIO;
@@ -7,9 +16,9 @@ pub struct MovingCameraPlugin;
 
 impl Plugin for MovingCameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(spawn_camera)
-            .add_system(zoom_system)
-            .add_system(camera_2d_movement_system);
+        app.add_plugins(PanCamPlugin)
+            .add_systems(Startup, spawn_camera)
+            .add_systems(Update, camera_2d_movement_system);
     }
 }
 
@@ -27,42 +36,46 @@ impl Plugin for MovingCameraPlugin {
 #[derive(Component)]
 pub struct FlyCamera2d {
     /// The speed the FlyCamera2d accelerates at.
-    pub accel: f32,
+    accel: f32,
     /// The maximum speed the FlyCamera can move at.
-    pub max_speed: f32,
+    max_speed: f32,
     /// The amount of deceleration to apply to the camera's motion.
-    pub friction: f32,
+    friction: f32,
     /// The current velocity of the FlyCamera2d. This value is always up-to-date, enforced by [FlyCameraPlugin](struct.FlyCameraPlugin.html)
-    pub velocity: Vec2,
-
-    pub zoom_speed: f32,
-    /// keep above 1.0 to avoid having to deal with far clip plane issues
-    pub min_zoom: f32,
-    pub max_zoom: f32,
+    velocity: Vec2,
 
     /// Key used to move left. Defaults to <kbd>A</kbd>
-    pub key_left: KeyCode,
+    key_left: KeyCode,
     /// Key used to move right. Defaults to <kbd>D</kbd>
-    pub key_right: KeyCode,
+    key_right: KeyCode,
     /// Key used to move up. Defaults to <kbd>W</kbd>
-    pub key_up: KeyCode,
+    key_up: KeyCode,
     /// Key used to move forward. Defaults to <kbd>S</kbd>
-    pub key_down: KeyCode,
+    key_down: KeyCode,
     /// If `false`, disable keyboard control of the camera. Defaults to `true`
-    pub enabled: bool,
+    enabled: bool,
 }
 
 fn spawn_camera(mut commands: Commands) {
     // allow Z layer between 0 and 1
     let mut camera = Camera2dBundle::new_with_far(2.0);
 
-    camera.projection.top = 1.0;
-    camera.projection.bottom = -1.0;
-    camera.projection.left = ASPECT_RATIO * -1.0;
-    camera.projection.right = ASPECT_RATIO * 1.0;
     camera.projection.scale = 3.0;
-    camera.projection.scaling_mode = ScalingMode::None;
-    commands.spawn(camera).insert(FlyCamera2d::default());
+    camera.projection.scaling_mode = ScalingMode::Fixed {
+        width: 2.0 * ASPECT_RATIO,
+        height: 2.0,
+    };
+    commands
+        .spawn(camera)
+        .insert(FlyCamera2d::default())
+        .insert(PanCam {
+            grab_buttons: vec![MouseButton::Right, MouseButton::Middle],
+            enabled: true,
+            zoom_to_cursor: true,
+            min_scale: 1.0,
+            max_scale: Some(12.0),
+            ..Default::default()
+        });
 }
 
 impl Default for FlyCamera2d {
@@ -73,9 +86,6 @@ impl Default for FlyCamera2d {
             max_speed: 0.5 * MUL_2D,
             friction: 5.0 * MUL_2D,
             velocity: Vec2::ZERO,
-            zoom_speed: 0.7,
-            min_zoom: 1.0,
-            max_zoom: 12.0,
             key_left: KeyCode::A,
             key_right: KeyCode::D,
             key_up: KeyCode::W,
@@ -86,16 +96,11 @@ impl Default for FlyCamera2d {
 }
 
 pub fn current_cursor_world_pos(
-    cam_pos: &Transform,
-    proj: &OrthographicProjection,
+    cam: &Camera,
+    cam_pos: &GlobalTransform,
     window: &Window,
 ) -> Option<Vec2> {
-    let window_size = Vec2::new(window.width(), window.height());
-    let window_pos = window.cursor_position()?;
-    let mouse_normalized_screen_pos = (window_pos / window_size) * 2. - Vec2::ONE;
-    let mouse_world_pos = cam_pos.translation.truncate()
-        + mouse_normalized_screen_pos * Vec2::new(proj.right, proj.top) * proj.scale;
-    Some(mouse_world_pos)
+    cam.viewport_to_world_2d(cam_pos, window.cursor_position()?)
 }
 
 fn movement_axis(input: &Res<Input<KeyCode>>, plus: KeyCode, minus: KeyCode) -> f32 {
@@ -155,39 +160,4 @@ fn camera_2d_movement_system(
 
         transform.translation += Vec3::new(options.velocity.x, options.velocity.y, 0.0);
     }
-}
-
-/// From https://github.com/bevyengine/bevy/issues/2580
-fn zoom_system(
-    mut whl: EventReader<MouseWheel>,
-    mut cam: Query<(&FlyCamera2d, &mut Transform, &mut OrthographicProjection), With<Camera>>,
-    windows: Res<Windows>,
-    // mut egui_context: ResMut<EguiContext>,
-) {
-    // Skip zooming if the mouse is above a inspector window
-    // if egui_context.ctx_mut().wants_pointer_input() {
-    //     return;
-    // }
-
-    let delta_zoom: f32 = whl.iter().map(|e| e.y).sum();
-    if delta_zoom == 0. {
-        return;
-    }
-
-    let (options, mut pos, mut cam) = cam.single_mut();
-
-    // Minor code duplication with the current_cursor_world_pos function
-    let window = windows.get_primary().unwrap();
-    let window_size = Vec2::new(window.width(), window.height());
-    let mouse_normalized_screen_pos =
-        (window.cursor_position().unwrap() / window_size) * 2. - Vec2::ONE;
-    let mouse_world_pos = pos.translation.truncate()
-        + mouse_normalized_screen_pos * Vec2::new(cam.right, cam.top) * cam.scale;
-
-    cam.scale -= options.zoom_speed * delta_zoom * cam.scale;
-    cam.scale = cam.scale.clamp(options.min_zoom, options.max_zoom);
-
-    pos.translation = (mouse_world_pos
-        - mouse_normalized_screen_pos * Vec2::new(cam.right, cam.top) * cam.scale)
-        .extend(pos.translation.z);
 }

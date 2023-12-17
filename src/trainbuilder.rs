@@ -1,4 +1,4 @@
-use bevy::{ecs::schedule::ShouldRun, prelude::*};
+use bevy::prelude::*;
 use petgraph::EdgeDirection;
 
 use crate::{railroad::RailGraph, tilemap::*, trains::*, ui::InteractingState};
@@ -9,12 +9,8 @@ pub struct TrainBuildingPlugin;
 
 impl Plugin for TrainBuildingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system_to_stage(StartupStage::PreStartup, load_texture_atlas)
-            .add_system_set(
-                SystemSet::new()
-                    .with_run_criteria(train_builder_condition)
-                    .with_system(train_builder),
-            );
+        app.add_systems(PreStartup, load_texture_atlas)
+            .add_systems(Update, train_builder.run_if(train_builder_condition));
     }
 }
 
@@ -47,10 +43,10 @@ impl TrainUnitType {
     }
 }
 
-fn train_builder_condition(state: Res<State<InteractingState>>) -> ShouldRun {
-    match state.current() {
-        InteractingState::PlaceTrains(_) => ShouldRun::Yes,
-        _ => ShouldRun::No,
+fn train_builder_condition(state: Res<State<InteractingState>>) -> bool {
+    match state.get() {
+        InteractingState::PlaceTrains(_) => true,
+        _ => false,
     }
 }
 
@@ -65,13 +61,13 @@ fn train_builder(
     wagons: Query<&mut TrainUnit>,
 ) {
     let graph = rail_graph.as_ref();
-    let wagon_type = match state.current() {
+    let wagon_type = match state.get() {
         InteractingState::PlaceTrains(v) => v.clone(),
         _ => unreachable!(
             "The run condition should insure that the train builder is only run in the PlaceTrains state!"
         ),
     };
-    for ev in click_event.iter() {
+    for ev in click_event.read() {
         if ev.side.is_none() {
             // for now ignore clicks in the center: might be ambigous
             continue;

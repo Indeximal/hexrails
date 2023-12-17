@@ -6,18 +6,19 @@ pub struct UIOverlayPlugin;
 
 impl Plugin for UIOverlayPlugin {
     fn build(&self, app: &mut App) {
-        app.add_state(InteractingState::None)
-            .add_startup_system(build_ui)
-            .add_system(button_system)
-            .add_system(button_hightlighting);
+        app.add_state::<InteractingState>()
+            .add_systems(Startup, build_ui)
+            .add_systems(Update, button_system)
+            .add_systems(Update, button_hightlighting);
     }
 }
 
 #[derive(Component)]
 pub struct InteractingStateTarget(InteractingState);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, States)]
 pub enum InteractingState {
+    #[default]
     None,
     PlaceRails(RailType),
     PlaceTrains(TrainUnitType),
@@ -33,7 +34,7 @@ fn button_hightlighting(
         return;
     }
     for (mut color, target_state) in button_query.iter_mut() {
-        *color = if target_state.0 == *state.current() {
+        *color = if target_state.0 == *state.get() {
             Color::rgb(0.8, 0.8, 0.8)
         } else {
             Color::WHITE
@@ -47,20 +48,16 @@ fn button_system(
         (&Interaction, &InteractingStateTarget),
         (Changed<Interaction>, With<Button>),
     >,
-    mut state: ResMut<State<InteractingState>>,
+    current_state: Res<State<InteractingState>>,
+    mut state_setter: ResMut<NextState<InteractingState>>,
 ) {
-    let current_state = state.as_ref().current().clone();
     for (interaction, target_state) in interaction_query.iter() {
         match *interaction {
-            Interaction::Clicked => {
-                if current_state == target_state.0 {
-                    state
-                        .set(InteractingState::None)
-                        .expect("Coundn't clear interacting state!");
+            Interaction::Pressed => {
+                if current_state.get() == &target_state.0 {
+                    state_setter.set(InteractingState::None);
                 } else {
-                    state
-                        .set(target_state.0)
-                        .expect("Coundn't set interacting state!");
+                    state_setter.set(target_state.0);
                 }
             }
             _ => {}
@@ -71,14 +68,16 @@ fn button_system(
 /// System to create the UI on startup
 fn build_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     let button_style = Style {
-        size: Size::new(Val::Percent(100.), Val::Percent(100.)),
+        width: Val::Percent(100.),
+        height: Val::Percent(100.),
         ..default()
     };
 
     commands
         .spawn(NodeBundle {
             style: Style {
-                size: Size::new(Val::Percent(50.), Val::Percent(12.)),
+                width: Val::Percent(50.),
+                height: Val::Percent(12.),
                 margin: UiRect {
                     left: Val::Auto,
                     right: Val::Auto,

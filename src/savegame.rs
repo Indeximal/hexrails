@@ -17,8 +17,8 @@ pub struct LoadSavePlugin;
 
 impl Plugin for LoadSavePlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system_to_stage(StartupStage::PostStartup, initial_load_system)
-            .add_system(save_system);
+        app.add_systems(PostStartup, initial_load_system)
+            .add_systems(Update, save_system);
     }
 }
 
@@ -196,8 +196,7 @@ fn load_game(world: &mut World) {
                 name: Name::new("Loaded Train"),
                 local_transform: Transform::default(),
                 global_transform: GlobalTransform::default(),
-                visiblity: Visibility::default(),
-                cvisiblity: Default::default(),
+                visiblity: Default::default(),
             })
             .push_children(&wagons);
     }

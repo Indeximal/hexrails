@@ -1,7 +1,6 @@
 use std::{f32::consts::PI, ops::Add};
 
 use bevy::prelude::*;
-use bevy::time::FixedTimestep;
 // use bevy_inspector_egui::Inspectable;
 use petgraph::EdgeDirection;
 use serde::{Deserialize, Serialize};
@@ -16,20 +15,21 @@ pub struct TrainPlugin;
 
 impl Plugin for TrainPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_to_stage(CoreStage::PostUpdate, position_train_units)
-            .add_system_set(
-                SystemSet::new()
-                    .with_run_criteria(FixedTimestep::steps_per_second(60.))
-                    .with_system(tick_velocity.before(tick_trains))
-                    .with_system(tick_trains),
+        app.insert_resource(Time::<Fixed>::from_seconds(1. / 60.))
+            .add_systems(PostUpdate, position_train_units)
+            .add_systems(
+                FixedUpdate,
+                (tick_velocity.before(tick_trains), tick_trains),
             )
-            .add_system(manual_train_driving)
-            .add_system(auto_extend_train_path)
-            .add_system(reverse_train_system)
-            .add_system_set(
-                SystemSet::on_update(InteractingState::SelectTrain)
+            .add_systems(Update, manual_train_driving)
+            .add_systems(Update, auto_extend_train_path)
+            .add_systems(Update, reverse_train_system)
+            .add_systems(
+                Update,
+                train_selection_system
                     // after, so that acceleration gets cleared properly
-                    .with_system(train_selection_system.after(manual_train_driving)),
+                    .after(manual_train_driving)
+                    .run_if(in_state(InteractingState::SelectTrain)),
             );
     }
 }
@@ -121,8 +121,7 @@ pub struct TrainBundle {
     /// always default, used for hierarchy
     pub local_transform: Transform,
     pub global_transform: GlobalTransform,
-    pub visiblity: Visibility,
-    pub cvisiblity: ComputedVisibility,
+    pub visiblity: VisibilityBundle,
 }
 
 impl TrainBundle {
@@ -138,7 +137,6 @@ impl TrainBundle {
             local_transform: Default::default(),
             global_transform: Default::default(),
             visiblity: Default::default(),
-            cvisiblity: Default::default(),
         }
     }
 }
@@ -278,7 +276,7 @@ fn train_selection_system(
     mut click_event: EventReader<TileClickEvent>,
 ) {
     // copied from trainbuilder::train_builder
-    for ev in click_event.iter() {
+    for ev in click_event.read() {
         if let Ok((entity, mut velocity)) = controlled_train.get_single_mut() {
             velocity.acceleration = 0.0;
             commands.entity(entity).remove::<PlayerControlledTrain>();

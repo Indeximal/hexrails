@@ -1,5 +1,5 @@
 use crate::{tilemap::*, ui::InteractingState};
-use bevy::{ecs::schedule::ShouldRun, prelude::*};
+use bevy::prelude::*;
 use petgraph::graphmap::DiGraphMap;
 use serde::{Deserialize, Serialize};
 
@@ -9,12 +9,8 @@ pub struct RailRoadPlugin;
 
 impl Plugin for RailRoadPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system_to_stage(StartupStage::PreStartup, load_texture_atlas)
-            .add_system_set(
-                SystemSet::new()
-                    .with_run_criteria(rail_builder_condition)
-                    .with_system(rail_builder),
-            );
+        app.add_systems(PreStartup, load_texture_atlas)
+            .add_systems(Update, rail_builder.run_if(rail_builder_condition));
     }
 }
 
@@ -72,10 +68,10 @@ impl TileFace {
     }
 }
 
-fn rail_builder_condition(state: Res<State<InteractingState>>) -> ShouldRun {
-    match state.current() {
-        InteractingState::PlaceRails(_) => ShouldRun::Yes,
-        _ => ShouldRun::No,
+fn rail_builder_condition(state: Res<State<InteractingState>>) -> bool {
+    match state.get() {
+        InteractingState::PlaceRails(_) => true,
+        _ => false,
     }
 }
 
@@ -90,14 +86,14 @@ fn rail_builder(
 ) {
     let rail_graph = rail_graph.as_mut();
     let root_entity = root_query.single();
-    let rail_type = match state.current() {
+    let rail_type = match state.get() {
         InteractingState::PlaceRails(v) => v.clone(),
         _ => unreachable!(
             "The run condition should insure that the rail builder is only run in the PlaceRails state!"
         ),
     };
 
-    for evt in click_event.iter() {
+    for evt in click_event.read() {
         if let Some(side) = evt.side {
             match evt.button {
                 MouseButton::Left => build_rail(

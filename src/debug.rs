@@ -23,7 +23,7 @@ impl Plugin for DebugPlugin {
                 .register_inspectable::<TrainHead>()
                 .register_inspectable::<TrainUnit>()
                 .register_inspectable::<Velocity>()
-                .add_system(draw_rail_graph);
+                .add_systems(Update, draw_rail_graph);
         }
     }
 }

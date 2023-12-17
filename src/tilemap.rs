@@ -15,10 +15,11 @@ pub struct TileMapPlugin;
 impl Plugin for TileMapPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<TileClickEvent>()
-            .add_system(mouse_button_events);
+            .add_systems(Update, mouse_button_events);
     }
 }
 
+#[derive(Event)]
 pub struct TileClickEvent {
     pub coord: TileCoordinate,
     pub side: Option<TileSide>,
@@ -189,8 +190,8 @@ impl TileCoordinate {
 fn mouse_button_events(
     mousebtn: Res<Input<MouseButton>>,
     mut click_event: EventWriter<TileClickEvent>,
-    windows: Res<Windows>,
-    cam: Query<(&Transform, &OrthographicProjection), With<FlyCamera2d>>,
+    windows: Query<&Window>,
+    cam: Query<(&GlobalTransform, &Camera), With<FlyCamera2d>>,
     // mut egui_context: ResMut<EguiContext>,
     other_buttons: Query<&Interaction>,
 ) {
@@ -201,19 +202,19 @@ fn mouse_button_events(
     // todo: fix, this doesn't work yet
     if other_buttons
         .iter()
-        .any(|interact| *interact == Interaction::Clicked)
+        .any(|interact| *interact == Interaction::Pressed)
     {
         return;
     }
 
     let (pos, cam) = cam.single();
-    let window = match windows.get_primary() {
+    let window = match windows.get_single().ok() {
         Some(w) => w,
         None => {
             return;
         }
     };
-    let world_pos = match current_cursor_world_pos(pos, cam, window) {
+    let world_pos = match current_cursor_world_pos(cam, pos, window) {
         Some(v) => v,
         None => {
             return;

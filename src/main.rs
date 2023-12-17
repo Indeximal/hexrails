@@ -26,30 +26,24 @@ fn main() {
     let height = 900.0;
     App::new()
         .insert_resource(ClearColor(BG_COLOR))
-        .add_startup_system(print_version)
         .add_plugins(DefaultPlugins.set(WindowPlugin {
-            window: WindowDescriptor {
-                width: height * ASPECT_RATIO,
-                height: height,
+            primary_window: Some(Window {
+                resolution: (height * ASPECT_RATIO, height).into(),
                 title: "Hex Rails".to_string(),
                 present_mode: bevy::window::PresentMode::Fifo,
                 resizable: false,
                 ..Default::default()
-            },
+            }),
             ..Default::default()
         }))
-        // .add_plugin(DebugPlugin)
-        .add_plugin(TerrainPlugin)
-        .add_plugin(TileMapPlugin)
-        .add_plugin(RailRoadPlugin)
-        .add_plugin(MovingCameraPlugin)
-        .add_plugin(LoadSavePlugin)
-        .add_plugin(TrainPlugin)
-        .add_plugin(UIOverlayPlugin)
-        .add_plugin(TrainBuildingPlugin)
+        // .add_plugins(DebugPlugin)
+        .add_plugins(TerrainPlugin)
+        .add_plugins(TileMapPlugin)
+        .add_plugins(RailRoadPlugin)
+        .add_plugins(MovingCameraPlugin)
+        .add_plugins(LoadSavePlugin)
+        .add_plugins(TrainPlugin)
+        .add_plugins(UIOverlayPlugin)
+        .add_plugins(TrainBuildingPlugin)
         .run();
-}
-
-fn print_version() {
-    info!("Started game!");
 }
