@@ -1,8 +1,7 @@
 use bevy::prelude::*;
 
-use crate::tilemap::{Tile, TILE_SCALE, TILE_SIZE};
-
-const Z_LAYER_TERRAIN: f32 = 0.1;
+use crate::assets::{SpriteAtlases, TerrainSprite};
+use crate::tilemap::Tile;
 
 pub struct TerrainPlugin;
 impl Plugin for TerrainPlugin {
@@ -10,19 +9,13 @@ impl Plugin for TerrainPlugin {
         // Todo: this need to be revamped with better ordering
         // but simply setting .before /.after doesn't work?
         // Maybe because the commands are only run after the stage
-        app.add_systems(PreStartup, load_texture_atlas)
-            .add_systems(PreStartup, spawn_terrain_root)
+        app.add_systems(PreStartup, spawn_terrain_root)
             .add_systems(Startup, spawn_tiles);
     }
 }
 
 #[derive(Component)]
 struct TerrainRoot;
-
-enum TerrainType {
-    Green,
-    Red,
-}
 
 #[derive(Component)]
 struct TileMarker;
@@ -38,7 +31,7 @@ fn spawn_terrain_root(mut commands: Commands) {
 /// system to spawn some tiles in a hexagon
 fn spawn_tiles(
     mut commands: Commands,
-    atlas_h: Res<TerrainAtlas>,
+    atlas: Res<SpriteAtlases>,
     root_query: Query<Entity, With<TerrainRoot>>,
 ) {
     let root_entity = root_query.single();
@@ -51,11 +44,11 @@ fn spawn_tiles(
         } {
             spawn_terrain_tile(
                 &mut commands,
-                &atlas_h,
+                &atlas,
                 root_entity,
                 match (x, y) {
-                    (0, 0) => TerrainType::Red,
-                    (_, _) => TerrainType::Green,
+                    (0, 0) => TerrainSprite::Red,
+                    (_, _) => TerrainSprite::Green,
                 },
                 Tile(x, y),
             );
@@ -66,54 +59,20 @@ fn spawn_tiles(
 /// helper function to spawn a tile
 fn spawn_terrain_tile(
     commands: &mut Commands,
-    atlas: &Res<TerrainAtlas>,
+    atlas: &SpriteAtlases,
     root_entity: Entity,
-    terrain_type: TerrainType,
+    terrain_type: TerrainSprite,
     position: Tile,
 ) {
-    let index = match terrain_type {
-        TerrainType::Green => 0,
-        TerrainType::Red => 1,
-    };
-    let mut sprite = TextureAtlasSprite::new(index);
-    sprite.custom_size = Some(Vec2::splat(TILE_SCALE));
+    let mut sprite = atlas.terrain_sprite(terrain_type);
+    sprite.transform.translation += position.world_pos().extend(0.);
 
     let child = commands
-        .spawn(SpriteSheetBundle {
-            sprite: sprite,
-            texture_atlas: atlas.0.clone(),
-            transform: Transform {
-                translation: position.world_pos().extend(Z_LAYER_TERRAIN),
-                ..Default::default()
-            },
-            ..Default::default()
-        })
+        .spawn(sprite)
         .insert(Name::new(format!("Tile {}", position)))
         .insert(TileMarker)
         .insert(position)
         .id();
 
     commands.entity(root_entity).add_child(child);
-}
-
-#[derive(Resource)]
-struct TerrainAtlas(Handle<TextureAtlas>);
-
-/// System to load the sprite sheet
-fn load_texture_atlas(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut texture_atlas: ResMut<Assets<TextureAtlas>>,
-) {
-    let image = asset_server.load("TerrainAtlas.png");
-    let atlas = TextureAtlas::from_grid(
-        image,
-        Vec2::new(TILE_SIZE, TILE_SIZE),
-        1,
-        2,
-        Some(Vec2::splat(2.0)),
-        Some(Vec2::splat(1.0)),
-    );
-    let atlas_handle = texture_atlas.add(atlas);
-    commands.insert_resource(TerrainAtlas(atlas_handle));
 }

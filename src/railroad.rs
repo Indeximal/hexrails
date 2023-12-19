@@ -1,17 +1,15 @@
-use crate::tilemap;
+use crate::assets::RailSprite;
 use crate::ui::InteractingState;
+use crate::{assets::SpriteAtlases, tilemap};
 use bevy::prelude::*;
 use petgraph::graphmap::DiGraphMap;
 use serde::{Deserialize, Serialize};
-
-const Z_LAYER_RAILS: f32 = 0.2;
 
 pub struct RailRoadPlugin;
 
 impl Plugin for RailRoadPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PreStartup, load_texture_atlas)
-            .add_systems(Update, rail_builder.run_if(rail_builder_condition));
+        app.add_systems(Update, rail_builder.run_if(rail_builder_condition));
     }
 }
 
@@ -68,7 +66,7 @@ fn rail_builder_condition(state: Res<State<InteractingState>>) -> bool {
 /// This system tries to build rails both in the graph and with sprites when the mouse is clicked.
 fn rail_builder(
     mut commands: Commands,
-    atlas_h: Res<RailAtlas>,
+    atlas_h: Res<SpriteAtlases>,
     mut click_event: EventReader<tilemap::TileClickEvent>,
     mut rail_graph: ResMut<RailGraph>,
     root_query: Query<Entity, With<RailNetworkRoot>>,
@@ -104,7 +102,7 @@ fn rail_builder(
 /// This helper function tries to build a single rail if it doesn't already exist
 fn build_rail(
     commands: &mut Commands,
-    atlas: &Res<RailAtlas>,
+    atlas: &Res<SpriteAtlases>,
     root_entity: Entity,
     rail_graph: &mut RailGraph,
     position: tilemap::Tile,
@@ -150,63 +148,32 @@ fn build_rail(
 /// This helper function spawns a rail sprite
 pub fn spawn_rail(
     commands: &mut Commands,
-    atlas: &RailAtlas,
+    atlas: &SpriteAtlases,
     root_entity: Entity,
     position: tilemap::Tile,
     start_side: tilemap::Direction,
     rail_type: RailType,
 ) {
-    let index = match rail_type {
-        RailType::Straight => 0,
-        RailType::CurvedLeft => 1,
-        RailType::CurvedRight => 1,
-    };
     let flipped = match rail_type {
         RailType::Straight => false,
         RailType::CurvedLeft => true,
         RailType::CurvedRight => false,
     };
-    let mut sprite = TextureAtlasSprite::new(index);
-    sprite.custom_size = Some(Vec2::splat(tilemap::TILE_SCALE));
-    sprite.flip_y = flipped;
+    let mut sprite = atlas.rail_sprite(match rail_type {
+        RailType::Straight => RailSprite::Straight,
+        RailType::CurvedLeft => RailSprite::CurvedRight,
+        RailType::CurvedRight => RailSprite::CurvedRight,
+    });
+    sprite.sprite.flip_y = flipped;
+    sprite.transform.rotate_z(start_side.to_angle());
+    sprite.transform.translation += position.world_pos().extend(0.);
 
     let child = commands
-        .spawn(SpriteSheetBundle {
-            sprite: sprite,
-            texture_atlas: atlas.0.clone(),
-            transform: Transform {
-                translation: position.world_pos().extend(Z_LAYER_RAILS),
-                rotation: Quat::from_rotation_z(start_side.to_angle()),
-                ..Default::default()
-            },
-            ..Default::default()
-        })
+        .spawn(sprite)
         .insert(Name::new(format!("Rail {}", position)))
         .insert(RailTile {})
         .insert(position)
         .id();
 
     commands.entity(root_entity).add_child(child);
-}
-
-#[derive(Resource)]
-pub struct RailAtlas(Handle<TextureAtlas>);
-
-/// This system loads the sprite atlas for the rails
-fn load_texture_atlas(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut texture_atlas: ResMut<Assets<TextureAtlas>>,
-) {
-    let image = asset_server.load("RailAtlas.png");
-    let atlas = TextureAtlas::from_grid(
-        image,
-        Vec2::new(tilemap::TILE_SIZE, tilemap::TILE_SIZE),
-        1,
-        2,
-        Some(Vec2::splat(2.0)),
-        Some(Vec2::splat(1.0)),
-    );
-    let atlas_handle = texture_atlas.add(atlas);
-    commands.insert_resource(RailAtlas(atlas_handle));
 }

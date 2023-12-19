@@ -14,8 +14,6 @@ use std::f32::consts::PI;
 
 /// Tile width (edge to edge) in world units.
 pub const TILE_SCALE: f32 = 0.5;
-/// Common texture resolution for a single tile.
-pub const TILE_SIZE: f32 = 128.;
 const SQRT3_HALF: f32 = 0.866025404;
 
 pub struct TileMapPlugin;

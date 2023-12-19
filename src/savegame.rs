@@ -5,7 +5,8 @@ use petgraph::graphmap::DiGraphMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    railroad::{spawn_rail, RailAtlas, RailGraph, RailNetworkRoot},
+    assets::SpriteAtlases,
+    railroad::{spawn_rail, RailGraph, RailNetworkRoot},
     trainbuilder::*,
     trains::*,
 };
@@ -165,8 +166,7 @@ fn load_savegame_file() -> Result<LoadedGame, Box<dyn Error>> {
 
 /// Helper to spawn the dynamic game state from a savegame. Requires the state to be cleaned first.
 fn load_game(world: &mut World) {
-    let train_atlas = world.resource::<TrainAtlas>();
-    let rail_atlas = world.resource::<RailAtlas>();
+    let atlases = world.resource::<SpriteAtlases>();
 
     let savegame = load_savegame_file().unwrap_or_else(|err| {
         info!("Creating new world, because: {}", err);
@@ -182,7 +182,7 @@ fn load_game(world: &mut World) {
         for (index, wagon) in train.wagons.into_iter().enumerate() {
             wagons.push(spawn_wagon(
                 &mut commands,
-                train_atlas,
+                atlases,
                 wagon.wagon_type,
                 wagon.stats,
                 index as u32,
@@ -211,7 +211,7 @@ fn load_game(world: &mut World) {
         if edge.should_render {
             spawn_rail(
                 &mut commands,
-                rail_atlas,
+                atlases,
                 rail_root,
                 start.tile,
                 start.side,

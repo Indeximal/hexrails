@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 # sudo apt install g++ pkg-config libx11-dev libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
 bevy = { version = "0.12", features = ["dynamic_linking"] }
-# bevy-inspector-egui = "0.11.0"
+bevy-inspector-egui = "0.21.0"
 # bevy_prototype_debug_lines = { version = "0.7.0", branch = "master" }
 bevy_pancam = "0.10.0"
 petgraph = { version = "0.6.4", features = ["serde-1"] }

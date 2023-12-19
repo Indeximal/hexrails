@@ -1,16 +1,19 @@
 use bevy::prelude::*;
 use petgraph::EdgeDirection;
 
-use crate::{railroad::RailGraph, tilemap::*, trains::*, ui::InteractingState};
-
-const Z_LAYER_TRAINS: f32 = 0.3;
+use crate::{
+    assets::{SpriteAtlases, VehicleSprite},
+    railroad::RailGraph,
+    tilemap::*,
+    trains::*,
+    ui::InteractingState,
+};
 
 pub struct TrainBuildingPlugin;
 
 impl Plugin for TrainBuildingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PreStartup, load_texture_atlas)
-            .add_systems(Update, train_builder.run_if(train_builder_condition));
+        app.add_systems(Update, train_builder.run_if(train_builder_condition));
     }
 }
 
@@ -34,15 +37,6 @@ impl TrainHead {
     }
 }
 
-impl TrainUnitType {
-    fn into_texture_atlas_index(&self) -> usize {
-        match self {
-            Self::Locomotive => 1,
-            Self::Wagon => 0,
-        }
-    }
-}
-
 fn train_builder_condition(state: Res<State<InteractingState>>) -> bool {
     match state.get() {
         InteractingState::PlaceTrains(_) => true,
@@ -53,7 +47,7 @@ fn train_builder_condition(state: Res<State<InteractingState>>) -> bool {
 /// This system tries to place a train wagon or a new train on click
 fn train_builder(
     mut commands: Commands,
-    atlas: Res<TrainAtlas>,
+    atlas: Res<SpriteAtlases>,
     mut click_event: EventReader<TileClickEvent>,
     rail_graph: Res<RailGraph>,
     state: Res<State<InteractingState>>,
@@ -116,7 +110,7 @@ fn train_builder(
 /// Precondition: `face` is in the `rail_graph` and has a neighbor.
 fn create_new_train(
     commands: &mut Commands,
-    atlas: &TrainAtlas,
+    atlas: &SpriteAtlases,
     face: Joint,
     rail_graph: &RailGraph,
     wagon_type: TrainUnitType,
@@ -153,7 +147,7 @@ fn create_new_train(
 /// Helper to insert a wagon into an existing train and move all other wagons accordingly
 fn insert_wagon(
     commands: &mut Commands,
-    atlas: &TrainAtlas,
+    atlas: &SpriteAtlases,
     sibling_ids: &Children,
     mut sibling_query: Query<&mut TrainUnit>,
     parent: Entity,
@@ -179,21 +173,18 @@ fn insert_wagon(
 // Helper to spawn a wagon sprite
 pub fn spawn_wagon(
     commands: &mut Commands,
-    atlas: &TrainAtlas,
+    atlas: &SpriteAtlases,
     wagon_type: TrainUnitType,
     wagon_stats: WagonStats,
     insert_index: u32,
 ) -> Entity {
-    let mut sprite = TextureAtlasSprite::new(wagon_type.into_texture_atlas_index());
-    sprite.custom_size = Some(Vec2::splat(TILE_SCALE));
+    let sprite = atlas.vehicle_sprite(match wagon_type {
+        TrainUnitType::Locomotive => VehicleSprite::PurpleBullet,
+        TrainUnitType::Wagon => VehicleSprite::GreyBox,
+    });
 
     commands
-        .spawn(SpriteSheetBundle {
-            sprite: sprite,
-            texture_atlas: atlas.0.clone(),
-            transform: Transform::from_translation(Vec3::Z * Z_LAYER_TRAINS),
-            ..Default::default()
-        })
+        .spawn(sprite)
         .insert(TrainUnit {
             position: insert_index,
         })
@@ -201,26 +192,4 @@ pub fn spawn_wagon(
         .insert(wagon_stats)
         .insert(Name::new("Wagon"))
         .id()
-}
-
-#[derive(Resource)]
-pub struct TrainAtlas(Handle<TextureAtlas>);
-
-/// System to load the sprite sheet
-fn load_texture_atlas(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut texture_atlas: ResMut<Assets<TextureAtlas>>,
-) {
-    let image = asset_server.load("TrainAtlas.png");
-    let atlas = TextureAtlas::from_grid(
-        image,
-        Vec2::new(TILE_SIZE, TILE_SIZE),
-        1,
-        2,
-        Some(Vec2::splat(2.0)),
-        Some(Vec2::splat(1.0)), // There is padding at the very edges (?)
-    );
-    let atlas_handle = texture_atlas.add(atlas);
-    commands.insert_resource(TrainAtlas(atlas_handle));
 }
