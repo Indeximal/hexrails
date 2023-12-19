@@ -1,10 +1,10 @@
-use crate::tilemap::*;
 use bevy::prelude::*;
+
+use crate::tilemap::{Tile, TILE_SCALE, TILE_SIZE};
 
 const Z_LAYER_TERRAIN: f32 = 0.1;
 
 pub struct TerrainPlugin;
-
 impl Plugin for TerrainPlugin {
     fn build(&self, app: &mut App) {
         // Todo: this need to be revamped with better ordering
@@ -25,7 +25,7 @@ enum TerrainType {
 }
 
 #[derive(Component)]
-struct Tile {}
+struct TileMarker;
 
 /// This system spawns the root node for all the terrain sprites, useful mostly for inspecting.
 fn spawn_terrain_root(mut commands: Commands) {
@@ -57,7 +57,7 @@ fn spawn_tiles(
                     (0, 0) => TerrainType::Red,
                     (_, _) => TerrainType::Green,
                 },
-                TileCoordinate(x, y),
+                Tile(x, y),
             );
         }
     }
@@ -69,7 +69,7 @@ fn spawn_terrain_tile(
     atlas: &Res<TerrainAtlas>,
     root_entity: Entity,
     terrain_type: TerrainType,
-    position: TileCoordinate,
+    position: Tile,
 ) {
     let index = match terrain_type {
         TerrainType::Green => 0,
@@ -83,13 +83,13 @@ fn spawn_terrain_tile(
             sprite: sprite,
             texture_atlas: atlas.0.clone(),
             transform: Transform {
-                translation: position.into_world_pos().extend(Z_LAYER_TERRAIN),
+                translation: position.world_pos().extend(Z_LAYER_TERRAIN),
                 ..Default::default()
             },
             ..Default::default()
         })
         .insert(Name::new(format!("Tile {}", position)))
-        .insert(Tile {})
+        .insert(TileMarker)
         .insert(position)
         .id();
 

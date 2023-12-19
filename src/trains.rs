@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     railroad::{RailGraph, RailType},
-    tilemap::{TileClickEvent, TileFace},
+    tilemap::{Joint, TileClickEvent},
     ui::InteractingState,
 };
 
@@ -89,7 +89,7 @@ pub struct TrainHead {
     /// Amount of wagons and locomotives. Must be equal to the number of TrainUnit children.
     pub length: u32,
     /// From 0 at the start to len at the destination. Must contain at least two values.
-    pub path: Vec<TileFace>,
+    pub path: Vec<Joint>,
 }
 
 impl TrainHead {
@@ -285,7 +285,7 @@ fn train_selection_system(
         if ev.side.is_none() {
             continue;
         }
-        let face = TileFace {
+        let face = Joint {
             tile: ev.coord,
             side: ev.side.unwrap(),
         };
@@ -342,7 +342,7 @@ fn position_train_units(
 }
 
 /// Helper to change the `output` Transform to intrapolate the start and end position and rotation
-fn move_train_unit(output: &mut Transform, start: TileFace, end: TileFace, t: f32) {
+fn move_train_unit(output: &mut Transform, start: Joint, end: Joint, t: f32) {
     // todo: actually move in an arc and not linear
     let start_pos = start.into_world_position();
     let end_pos = end.into_world_position();

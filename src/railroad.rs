@@ -1,4 +1,5 @@
-use crate::{tilemap::*, ui::InteractingState};
+use crate::tilemap;
+use crate::ui::InteractingState;
 use bevy::prelude::*;
 use petgraph::graphmap::DiGraphMap;
 use serde::{Deserialize, Serialize};
@@ -19,7 +20,7 @@ pub struct RailNetworkRoot;
 
 #[derive(Serialize, Deserialize, Resource)]
 pub struct RailGraph {
-    pub graph: DiGraphMap<TileFace, RailEdge>,
+    pub graph: DiGraphMap<tilemap::Joint, RailEdge>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -47,23 +48,12 @@ impl RailType {
             RailType::CurvedRight => RailType::CurvedLeft,
         }
     }
-}
 
-impl TileFace {
-    pub fn next_face_with(&self, rail: RailType) -> TileFace {
-        match rail {
-            RailType::Straight => TileFace {
-                tile: self.tile.neighbor(self.side.opposite()),
-                side: self.side,
-            },
-            RailType::CurvedLeft => TileFace {
-                tile: self.tile.neighbor(self.side.curve_left()),
-                side: self.side.curve_left().opposite(),
-            },
-            RailType::CurvedRight => TileFace {
-                tile: self.tile.neighbor(self.side.curve_right()),
-                side: self.side.curve_right().opposite(),
-            },
+    pub fn next_joint(&self, joint: tilemap::Joint) -> tilemap::Joint {
+        match self {
+            RailType::Straight => joint.next_straight(),
+            RailType::CurvedLeft => joint.next_left(),
+            RailType::CurvedRight => joint.next_right(),
         }
     }
 }
@@ -79,7 +69,7 @@ fn rail_builder_condition(state: Res<State<InteractingState>>) -> bool {
 fn rail_builder(
     mut commands: Commands,
     atlas_h: Res<RailAtlas>,
-    mut click_event: EventReader<TileClickEvent>,
+    mut click_event: EventReader<tilemap::TileClickEvent>,
     mut rail_graph: ResMut<RailGraph>,
     root_query: Query<Entity, With<RailNetworkRoot>>,
     state: Res<State<InteractingState>>,
@@ -117,15 +107,15 @@ fn build_rail(
     atlas: &Res<RailAtlas>,
     root_entity: Entity,
     rail_graph: &mut RailGraph,
-    position: TileCoordinate,
-    start_side: TileSide,
+    position: tilemap::Tile,
+    start_side: tilemap::Direction,
     rail_type: RailType,
 ) {
-    let start_face = TileFace {
+    let start_face = tilemap::Joint {
         tile: position,
         side: start_side,
     };
-    let end_face = start_face.next_face_with(rail_type);
+    let end_face = rail_type.next_joint(start_face);
 
     let edge1 = rail_graph.graph.add_edge(
         start_face,
@@ -162,8 +152,8 @@ pub fn spawn_rail(
     commands: &mut Commands,
     atlas: &RailAtlas,
     root_entity: Entity,
-    position: TileCoordinate,
-    start_side: TileSide,
+    position: tilemap::Tile,
+    start_side: tilemap::Direction,
     rail_type: RailType,
 ) {
     let index = match rail_type {
@@ -177,7 +167,7 @@ pub fn spawn_rail(
         RailType::CurvedRight => false,
     };
     let mut sprite = TextureAtlasSprite::new(index);
-    sprite.custom_size = Some(Vec2::splat(TILE_SCALE));
+    sprite.custom_size = Some(Vec2::splat(tilemap::TILE_SCALE));
     sprite.flip_y = flipped;
 
     let child = commands
@@ -185,7 +175,7 @@ pub fn spawn_rail(
             sprite: sprite,
             texture_atlas: atlas.0.clone(),
             transform: Transform {
-                translation: position.into_world_pos().extend(Z_LAYER_RAILS),
+                translation: position.world_pos().extend(Z_LAYER_RAILS),
                 rotation: Quat::from_rotation_z(start_side.to_angle()),
                 ..Default::default()
             },
@@ -211,7 +201,7 @@ fn load_texture_atlas(
     let image = asset_server.load("RailAtlas.png");
     let atlas = TextureAtlas::from_grid(
         image,
-        Vec2::new(TILE_SIZE, TILE_SIZE),
+        Vec2::new(tilemap::TILE_SIZE, tilemap::TILE_SIZE),
         1,
         2,
         Some(Vec2::splat(2.0)),

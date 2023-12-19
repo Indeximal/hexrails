@@ -17,7 +17,7 @@ impl Plugin for TrainBuildingPlugin {
 impl TrainHead {
     /// Returns the index of the wagon currently nearest to `face` or `length` if at the end.
     /// Returns none if the face is not on the path or not near any wagon.
-    pub fn index_for_tile(&self, face: TileFace) -> Option<u32> {
+    pub fn index_for_tile(&self, face: Joint) -> Option<u32> {
         if self.path_progress - self.length as f32 <= 1. {
             // no space for a new wagon
             return None;
@@ -73,7 +73,7 @@ fn train_builder(
             continue;
         }
         // todo: also consider the opposite tile face
-        let face = TileFace {
+        let face = Joint {
             tile: ev.coord,
             side: ev.side.unwrap(),
         };
@@ -117,7 +117,7 @@ fn train_builder(
 fn create_new_train(
     commands: &mut Commands,
     atlas: &TrainAtlas,
-    face: TileFace,
+    face: Joint,
     rail_graph: &RailGraph,
     wagon_type: TrainUnitType,
 ) {

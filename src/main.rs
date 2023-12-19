@@ -1,13 +1,4 @@
 use bevy::prelude::*;
-use camera::MovingCameraPlugin;
-// use debug::DebugPlugin;
-use railroad::RailRoadPlugin;
-use savegame::LoadSavePlugin;
-use terrain::TerrainPlugin;
-use tilemap::TileMapPlugin;
-use trainbuilder::TrainBuildingPlugin;
-use trains::TrainPlugin;
-use ui::UIOverlayPlugin;
 
 mod camera;
 // mod debug;
@@ -36,14 +27,14 @@ fn main() {
             }),
             ..Default::default()
         }))
-        // .add_plugins(DebugPlugin)
-        .add_plugins(TerrainPlugin)
-        .add_plugins(TileMapPlugin)
-        .add_plugins(RailRoadPlugin)
-        .add_plugins(MovingCameraPlugin)
-        .add_plugins(LoadSavePlugin)
-        .add_plugins(TrainPlugin)
-        .add_plugins(UIOverlayPlugin)
-        .add_plugins(TrainBuildingPlugin)
+        .add_plugins(camera::MovingCameraPlugin)
+        // .add_plugins(debug::DebugPlugin)
+        .add_plugins(railroad::RailRoadPlugin)
+        .add_plugins(savegame::LoadSavePlugin)
+        .add_plugins(terrain::TerrainPlugin)
+        .add_plugins(tilemap::TileMapPlugin)
+        .add_plugins(trainbuilder::TrainBuildingPlugin)
+        .add_plugins(trains::TrainPlugin)
+        .add_plugins(ui::UIOverlayPlugin)
         .run();
 }
