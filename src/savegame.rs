@@ -4,15 +4,13 @@ use bevy::{ecs::system::CommandQueue, prelude::*};
 use petgraph::graphmap::DiGraphMap;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    assets::SpriteAtlases,
-    railroad::{spawn_rail, RailGraph, RailNetworkRoot},
-    trainbuilder::*,
-    trains::*,
-};
+use crate::assets::SpriteAtlases;
+use crate::railroad::{spawn_rail, NetworkRoot, RailGraph, Track};
+use crate::trainbuilder::*;
+use crate::trains::*;
 
 const SAVEGAME_PATH: &str = "savegame/stupid.json";
-const CURRENT_SAVEGAME_VERSION: u32 = 5;
+const CURRENT_SAVEGAME_VERSION: u32 = 6;
 
 pub struct LoadSavePlugin;
 
@@ -138,7 +136,7 @@ fn save_game(world: &mut World) {
 
 /// This helper function takes the same query as save and instead despawns relevant entities
 fn clean_game(world: &mut World) {
-    let mut rail_root = world.query_filtered::<Entity, With<RailNetworkRoot>>();
+    let mut rail_root = world.query_filtered::<Entity, With<NetworkRoot>>();
     // This iter then collect then iter is possible because, no two matching entites are in hierachical relation.
     for entity in rail_root.iter(world).collect::<Vec<Entity>>().iter() {
         world.entity_mut(entity.clone()).despawn_recursive();
@@ -204,19 +202,16 @@ fn load_game(world: &mut World) {
     // Rails
     let rail_root = commands
         .spawn(SpatialBundle::default())
-        .insert(RailNetworkRoot)
+        .insert(NetworkRoot)
         .insert(Name::new("Rail Network"))
         .id();
-    for (start, _, edge) in savegame.network.graph.all_edges() {
-        if edge.should_render {
-            spawn_rail(
-                &mut commands,
-                atlases,
-                rail_root,
-                start.tile,
-                start.side,
-                edge.rail_type,
-            );
+    for (start, end, _edge) in savegame.network.graph.all_edges() {
+        let Some(tt) = Track::from_joints(start, end) else {
+            error!("Broken Graph: edge which does not represent a track {start:?}->{end:?}");
+            return;
+        };
+        if tt.is_canonical_orientation() {
+            spawn_rail(&mut commands, atlases, rail_root, tt);
         }
     }
 

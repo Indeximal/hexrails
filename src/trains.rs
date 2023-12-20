@@ -6,7 +6,7 @@ use petgraph::EdgeDirection;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    railroad::{RailGraph, RailType},
+    railroad::{RailGraph, Track, TrackType},
     tilemap::{Joint, TileClickEvent},
     ui::InteractingState,
 };
@@ -190,11 +190,11 @@ fn auto_extend_train_path(
     let preferrs_left = input.pressed(KeyCode::Left);
     let preferrs_right = input.pressed(KeyCode::Right);
     let preferred_direction = if preferrs_left == preferrs_right {
-        RailType::Straight
+        TrackType::Straight
     } else if preferrs_left {
-        RailType::CurvedLeft
+        TrackType::CurvedLeft
     } else {
-        RailType::CurvedRight
+        TrackType::CurvedRight
     };
 
     for (mut train, is_player_controlled) in trains.iter_mut() {
@@ -210,9 +210,14 @@ fn auto_extend_train_path(
             let mut next_tile = None;
             graph
                 .edges_directed(path_end, EdgeDirection::Outgoing)
-                .for_each(|(_, next, edge)| {
+                .for_each(|(this, next, _edge)| {
                     // Prefer input direction, if this train is steered by a player
-                    if is_player_controlled.is_some() && edge.rail_type == preferred_direction {
+                    if is_player_controlled.is_some()
+                        && (Track::from_joints(this, next))
+                            .expect("Invariant: graph only has track edges")
+                            .heading
+                            == preferred_direction
+                    {
                         next_tile = Some(next);
                     } else if next_tile.is_none() {
                         next_tile = Some(next);

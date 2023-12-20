@@ -58,9 +58,12 @@ pub struct Tile(pub i32, pub i32);
 pub struct Direction(u8);
 
 /// This is the edge of the tile at coordinate `tile` in the `side` direction.
-/// e.g (0, 0) EAST is the right part of the origin tile, but when used as an
-/// coordinate for a track, this rail is going east to west (or south/north-west).
-#[derive(Default, Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Serialize, Deserialize)]
+///
+/// E.g (0, 0) EAST is the right part of the origin tile, but when used as an
+/// coordinate for a track, this rail is going east to west (or SW/NW).
+#[derive(
+    Default, Debug, Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Serialize, Deserialize,
+)]
 pub struct Joint {
     pub tile: Tile,
     pub side: Direction,
