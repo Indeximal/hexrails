@@ -1,6 +1,7 @@
 use bevy::prelude::*;
+use rand::seq::SliceRandom;
 
-use crate::assets::{SpriteAtlases, TerrainSprite};
+use crate::sprites::{SpriteAtlases, TerrainSprite};
 use crate::tilemap::Tile;
 
 pub struct TerrainPlugin;
@@ -19,6 +20,10 @@ struct TerrainRoot;
 
 #[derive(Component)]
 struct TileMarker;
+
+enum TerrainType {
+    Land,
+}
 
 /// This system spawns the root node for all the terrain sprites, useful mostly for inspecting.
 fn spawn_terrain_root(mut commands: Commands) {
@@ -46,10 +51,7 @@ fn spawn_tiles(
                 &mut commands,
                 &atlas,
                 root_entity,
-                match (x, y) {
-                    (0, 0) => TerrainSprite::Red,
-                    (_, _) => TerrainSprite::Green,
-                },
+                TerrainType::Land,
                 Tile(x, y),
             );
         }
@@ -61,10 +63,23 @@ fn spawn_terrain_tile(
     commands: &mut Commands,
     atlas: &SpriteAtlases,
     root_entity: Entity,
-    terrain_type: TerrainSprite,
+    terrain_type: TerrainType,
     position: Tile,
 ) {
-    let mut sprite = atlas.terrain_sprite(terrain_type);
+    let &sprite_id = match terrain_type {
+        TerrainType::Land => [
+            TerrainSprite::Land1,
+            TerrainSprite::Land1,
+            TerrainSprite::Land2,
+            TerrainSprite::Land3,
+            TerrainSprite::Land3,
+            TerrainSprite::Land3,
+        ]
+        .choose(&mut rand::thread_rng())
+        .expect("constant array is non-empty"),
+    };
+
+    let mut sprite = atlas.terrain_sprite(sprite_id);
     sprite.transform.translation += position.world_pos().extend(0.);
 
     let child = commands

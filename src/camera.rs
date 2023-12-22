@@ -72,7 +72,7 @@ fn spawn_camera(mut commands: Commands) {
             grab_buttons: vec![MouseButton::Right, MouseButton::Middle],
             enabled: true,
             zoom_to_cursor: true,
-            min_scale: 1.0,
+            min_scale: 0.5,
             max_scale: Some(12.0),
             ..Default::default()
         });

@@ -2,8 +2,8 @@ use bevy::prelude::*;
 use petgraph::EdgeDirection;
 
 use crate::{
-    assets::{SpriteAtlases, VehicleSprite},
     railroad::RailGraph,
+    sprites::{SpriteAtlases, VehicleSprite},
     tilemap::*,
     trains::*,
     ui::InteractingState,
@@ -90,7 +90,7 @@ fn train_builder(
                     wagons,
                     parent,
                     wagon_type.clone(),
-                    WagonStats::default_for_type(wagon_type),
+                    VehicleStats::default_for_type(wagon_type),
                     new_index,
                 );
                 train.length += 1;
@@ -127,7 +127,7 @@ fn create_new_train(
         commands,
         atlas,
         wagon_type,
-        WagonStats::default_for_type(wagon_type),
+        VehicleStats::default_for_type(wagon_type),
         0,
     );
 
@@ -152,7 +152,7 @@ fn insert_wagon(
     mut sibling_query: Query<&mut TrainUnit>,
     parent: Entity,
     wagon_type: TrainUnitType,
-    wagon_stats: WagonStats,
+    wagon_stats: VehicleStats,
     insert_index: u32,
 ) {
     info!("Inserting wagon at {}", insert_index);
@@ -175,7 +175,7 @@ pub fn spawn_wagon(
     commands: &mut Commands,
     atlas: &SpriteAtlases,
     wagon_type: TrainUnitType,
-    wagon_stats: WagonStats,
+    wagon_stats: VehicleStats,
     insert_index: u32,
 ) -> Entity {
     let sprite = atlas.vehicle_sprite(match wagon_type {

@@ -1,5 +1,5 @@
-use crate::assets::RailSprite;
-use crate::assets::SpriteAtlases;
+use crate::sprites::RailSprite;
+use crate::sprites::SpriteAtlases;
 use crate::tilemap::Joint;
 use crate::tilemap::TileClickEvent;
 use crate::ui::InteractingState;

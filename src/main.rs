@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 
-mod assets;
 mod camera;
 mod debug;
 mod railroad;
 mod savegame;
+mod sprites;
 mod terrain;
 mod tilemap;
 mod trainbuilder;
@@ -28,7 +28,7 @@ fn main() {
             }),
             ..Default::default()
         }))
-        .add_plugins(assets::AssetPlugin)
+        .add_plugins(sprites::AssetPlugin)
         .add_plugins(camera::MovingCameraPlugin)
         .add_plugins(debug::DebugPlugin)
         .add_plugins(railroad::RailRoadPlugin)

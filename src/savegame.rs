@@ -4,8 +4,8 @@ use bevy::{ecs::system::CommandQueue, prelude::*};
 use petgraph::graphmap::DiGraphMap;
 use serde::{Deserialize, Serialize};
 
-use crate::assets::SpriteAtlases;
 use crate::railroad::{spawn_rail, NetworkRoot, RailGraph, Track};
+use crate::sprites::SpriteAtlases;
 use crate::trainbuilder::*;
 use crate::trains::*;
 
@@ -71,13 +71,13 @@ struct LoadedTrain {
 #[derive(Serialize)]
 struct SavedWagon<'a> {
     wagon_type: &'a TrainUnitType,
-    stats: &'a WagonStats,
+    stats: &'a VehicleStats,
 }
 
 #[derive(Deserialize)]
 struct LoadedWagon {
     wagon_type: TrainUnitType,
-    stats: WagonStats,
+    stats: VehicleStats,
 }
 
 /// System to listen to keypresses and load/save the game accordingly
@@ -98,7 +98,7 @@ fn initial_load_system(world: &mut World) {
 /// Helper to save the game
 fn save_game(world: &mut World) {
     let mut trains_query = world.query::<(Entity, &Children, &TrainHead, &Velocity)>();
-    let mut wagons_query = world.query::<(&TrainUnit, &TrainUnitType, &WagonStats)>();
+    let mut wagons_query = world.query::<(&TrainUnit, &TrainUnitType, &VehicleStats)>();
 
     let mut trains = Vec::new();
     for (_, children, head, velocity) in trains_query.iter(world) {

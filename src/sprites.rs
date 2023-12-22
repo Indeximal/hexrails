@@ -4,6 +4,8 @@ use crate::tilemap::TILE_SCALE;
 
 /// Texture resolution for a single tile.
 const TILE_RESOLUTION: f32 = 128.;
+/// The padding in pixels to each side for each tile.
+const TILE_PADDING: f32 = 1.;
 
 const Z_LAYER_TERRAIN: f32 = 0.1;
 const Z_LAYER_RAILS: f32 = 0.2;
@@ -27,8 +29,9 @@ pub struct SpriteAtlases {
 
 #[derive(Debug, Clone, Copy)]
 pub enum TerrainSprite {
-    Green = 0,
-    Red = 1,
+    Land1 = 0,
+    Land2 = 1,
+    Land3 = 2,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -85,25 +88,25 @@ fn load_texture_atlases(
         asset_server.load("TerrainAtlas.png"),
         Vec2::new(TILE_RESOLUTION, TILE_RESOLUTION),
         1,
-        2,
-        Some(Vec2::splat(2.0)),
-        Some(Vec2::splat(1.0)),
+        3,
+        Some(Vec2::splat(2. * TILE_PADDING)),
+        Some(Vec2::splat(TILE_PADDING)),
     );
     let rails = TextureAtlas::from_grid(
         asset_server.load("RailAtlas.png"),
         Vec2::new(TILE_RESOLUTION, TILE_RESOLUTION),
         1,
         2,
-        Some(Vec2::splat(2.0)),
-        Some(Vec2::splat(1.0)),
+        Some(Vec2::splat(2. * TILE_PADDING)),
+        Some(Vec2::splat(TILE_PADDING)),
     );
     let vehicles = TextureAtlas::from_grid(
         asset_server.load("TrainAtlas.png"),
         Vec2::new(TILE_RESOLUTION, TILE_RESOLUTION),
         1,
         2,
-        Some(Vec2::splat(2.0)),
-        Some(Vec2::splat(1.0)),
+        Some(Vec2::splat(2. * TILE_PADDING)),
+        Some(Vec2::splat(TILE_PADDING)),
     );
 
     commands.insert_resource(SpriteAtlases {
