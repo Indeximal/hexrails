@@ -1,3 +1,12 @@
+//! This module is concerned about texture atlases for sprites.
+//!
+//! Sprite textures are 130M x 130N pixels, where each texture is 128px by 128px and spans 1 tile high.
+//! (There is some wasted space at the right & left edges, aswell as in the corners).
+//!
+//! The transparent pixels should be colorized (eg with <https://github.com/urraka/alpha-bleeding>),
+//! in order to prevent alpha bleeding.
+//!
+
 use bevy::prelude::*;
 
 use crate::tilemap::TILE_SCALE;
@@ -75,10 +84,7 @@ impl SpriteAtlases {
     }
 }
 
-/// This system loads the sprite atlases.
-///
-/// They are 130M x 130N pixels, where each texture is 128px by 128px and spans 1 tile high.
-/// (Wasted space at the right & left edges).
+/// This system loads the sprite atlases from disk.
 fn load_texture_atlases(
     mut commands: Commands,
     mut texture_atlas: ResMut<Assets<TextureAtlas>>,
