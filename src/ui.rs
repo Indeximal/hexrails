@@ -1,6 +1,6 @@
 use bevy::{prelude::*, ui::FocusPolicy};
 
-use crate::{railroad::TrackType, trains::TrainUnitType};
+use crate::{railroad::TrackType, trains::VehicleType};
 
 pub struct UIOverlayPlugin;
 
@@ -21,7 +21,7 @@ pub enum InteractingState {
     #[default]
     None,
     PlaceRails(TrackType),
-    PlaceTrains(TrainUnitType),
+    PlaceTrains(VehicleType),
     SelectTrain,
 }
 
@@ -105,11 +105,11 @@ fn build_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                     "ui/icon_rail_left.png",
                 ),
                 (
-                    InteractingState::PlaceTrains(TrainUnitType::Locomotive),
+                    InteractingState::PlaceTrains(VehicleType::Locomotive),
                     "ui/icon_locomotive.png",
                 ),
                 (
-                    InteractingState::PlaceTrains(TrainUnitType::Wagon),
+                    InteractingState::PlaceTrains(VehicleType::Wagon),
                     "ui/icon_wagon.png",
                 ),
                 (InteractingState::SelectTrain, "ui/icon_drive.png"),

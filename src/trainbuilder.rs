@@ -17,10 +17,10 @@ impl Plugin for TrainBuildingPlugin {
     }
 }
 
-impl TrainHead {
+impl Train {
     /// Returns the index of the wagon currently nearest to `face` or `length` if at the end.
     /// Returns none if the face is not on the path or not near any wagon.
-    pub fn index_for_tile(&self, face: Joint) -> Option<u32> {
+    pub fn index_for_tile(&self, face: Joint) -> Option<u16> {
         if self.path_progress - self.length as f32 <= 1. {
             // no space for a new wagon
             return None;
@@ -32,7 +32,7 @@ impl TrainHead {
         } else if index >= self.length as f32 + 1. {
             None
         } else {
-            Some(index.floor() as u32)
+            Some(index.floor() as u16)
         }
     }
 }
@@ -51,8 +51,8 @@ fn train_builder(
     mut click_event: EventReader<TileClickEvent>,
     rail_graph: Res<RailGraph>,
     state: Res<State<InteractingState>>,
-    mut trains: Query<(Entity, &Children, &mut TrainHead)>,
-    wagons: Query<&mut TrainUnit>,
+    mut trains: Query<(Entity, &Children, &mut Train)>,
+    wagons: Query<&mut TrainIndex>,
 ) {
     let graph = rail_graph.as_ref();
     let wagon_type = match state.get() {
@@ -113,7 +113,7 @@ fn create_new_train(
     atlas: &SpriteAtlases,
     face: Joint,
     rail_graph: &RailGraph,
-    wagon_type: TrainUnitType,
+    wagon_type: VehicleType,
 ) {
     info!("Creating train at @{}", face.tile);
 
@@ -133,12 +133,12 @@ fn create_new_train(
 
     commands
         .spawn(TrainBundle::new(
-            TrainHead {
+            Train {
                 path: vec![face, next_face],
                 path_progress: 1.0,
                 length: 1,
             },
-            20. / 60.,
+            55.0, // approx 200kmh
         ))
         .insert(VisibilityBundle::default())
         .add_child(first_wagon);
@@ -149,11 +149,11 @@ fn insert_wagon(
     commands: &mut Commands,
     atlas: &SpriteAtlases,
     sibling_ids: &Children,
-    mut sibling_query: Query<&mut TrainUnit>,
+    mut sibling_query: Query<&mut TrainIndex>,
     parent: Entity,
-    wagon_type: TrainUnitType,
+    wagon_type: VehicleType,
     wagon_stats: VehicleStats,
-    insert_index: u32,
+    insert_index: u16,
 ) {
     info!("Inserting wagon at {}", insert_index);
 
@@ -174,18 +174,18 @@ fn insert_wagon(
 pub fn spawn_wagon(
     commands: &mut Commands,
     atlas: &SpriteAtlases,
-    wagon_type: TrainUnitType,
+    wagon_type: VehicleType,
     wagon_stats: VehicleStats,
-    insert_index: u32,
+    insert_index: u16,
 ) -> Entity {
     let sprite = atlas.vehicle_sprite(match wagon_type {
-        TrainUnitType::Locomotive => VehicleSprite::PurpleBullet,
-        TrainUnitType::Wagon => VehicleSprite::GreyBox,
+        VehicleType::Locomotive => VehicleSprite::PurpleBullet,
+        VehicleType::Wagon => VehicleSprite::GreyBox,
     });
 
     commands
         .spawn(sprite)
-        .insert(TrainUnit {
+        .insert(TrainIndex {
             position: insert_index,
         })
         .insert(wagon_type)

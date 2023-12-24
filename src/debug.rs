@@ -5,13 +5,15 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 use crate::railroad::RailGraph;
 use crate::tilemap::{Joint, TILE_SCALE};
+use crate::trains::Velocity;
 
 pub struct DebugPlugin;
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
         if cfg!(debug_assertions) {
             app.add_plugins(WorldInspectorPlugin::new())
-                .add_systems(Update, draw_rail_graph);
+                .add_systems(Update, draw_rail_graph)
+                .register_type::<Velocity>();
         }
     }
 }

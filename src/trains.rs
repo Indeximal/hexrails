@@ -1,18 +1,19 @@
 use std::{f32::consts::PI, ops::Add};
 
 use bevy::prelude::*;
-// use bevy_inspector_egui::Inspectable;
 use petgraph::EdgeDirection;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    railroad::{RailGraph, Track, TrackType},
-    tilemap::{Joint, TileClickEvent},
-    ui::InteractingState,
-};
+use crate::railroad::{RailGraph, Track, TrackType};
+use crate::tilemap::{Joint, TileClickEvent};
+use crate::ui::InteractingState;
+
+/// The length in meters that a single track covers.
+///
+/// I.e. the width of the hexagons and length of the vehicles in meters.
+const METER_PER_TRACK: f32 = 15.;
 
 pub struct TrainPlugin;
-
 impl Plugin for TrainPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Time::<Fixed>::from_seconds(1. / 60.))
@@ -21,78 +22,124 @@ impl Plugin for TrainPlugin {
                 FixedUpdate,
                 (tick_velocity.before(tick_trains), tick_trains),
             )
-            .add_systems(Update, manual_train_driving)
-            .add_systems(Update, auto_extend_train_path)
-            .add_systems(Update, reverse_train_system)
+            .add_systems(Update, manual_driving::throttling_system)
+            .add_systems(Update, manual_driving::auto_extend_train_path)
+            .add_systems(Update, manual_driving::reverse_train_system)
             .add_systems(
                 Update,
-                train_selection_system
+                manual_driving::train_selection_system
                     // after, so that acceleration gets cleared properly
-                    .after(manual_train_driving)
+                    .after(manual_driving::throttling_system)
                     .run_if(in_state(InteractingState::SelectTrain)),
             );
     }
 }
 
+#[derive(Bundle)]
+pub struct TrainBundle {
+    pub path: Train,
+    pub velocity: Velocity,
+    pub controller: Controller,
+
+    /// Currently always "Train" for inspection
+    pub name: Name,
+    /// Always default, used for hierarchy
+    pub spatial: SpatialBundle,
+}
+
+#[derive(Component, Serialize, Deserialize)]
+pub struct Train {
+    /// From 0 at the start to len at the destination. Must contain at least `length + 1` values.
+    pub path: Vec<Joint>,
+    /// A fractional index into path, where the front of the train is.
+    /// Must obey `length + 1 < path_progress <= path.len() - 1` (todo: check)
+    pub path_progress: f32,
+    /// Amount of wagons and locomotives. Must be equal to the number of [`TrainIndex`] children.
+    pub length: u16,
+}
+
+#[derive(Component, Serialize, Deserialize)]
+pub struct VehicleStats {
+    /// Inertial mass in tons of this vehicle
+    pub weight: f32,
+    /// TODO: convert to kW
+    pub acceleration_power: f32,
+    /// The "Bremsgewicht" of this vehicle in tons. See <https://de.wikipedia.org/wiki/Bremsgewicht>.
+    pub braking_weight: f32,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum VehicleType {
+    Locomotive,
+    Wagon,
+}
+
+#[derive(Component)]
+pub struct TrainIndex {
+    /// Starting with 0, this is subtracted from [`Train::path_progress`].
+    pub position: u16,
+}
+
+#[derive(Component, Reflect, Serialize, Deserialize)]
+pub struct Velocity {
+    /// Current velocity in m/s. Should be non-negative
+    pub velocity: f32,
+    /// `velocity` will be clamped to this value.
+    /// TODO: move into stats
+    pub max_velocity: f32,
+    // Stats that affect the moving object are given by the sum of all vehicles.
+}
+
+#[derive(Component, Default)]
+pub struct Controller {
+    /// The fraction of the power being applied. Must be in the interval [0, 1].
+    throttle: f32,
+    /// The fraction of the brake being applied. Must be in the interval [0, 1].
+    brake: f32,
+}
+
 #[derive(Component)]
 pub struct PlayerControlledTrain;
 
-#[derive(Component, Serialize, Deserialize)]
-pub struct WagonStats {
-    pub weight: f32,
-    pub acceleration_power: f32,
-    pub braking_power: f32,
-}
-
-impl WagonStats {
-    pub fn default_for_type(wagon_type: TrainUnitType) -> Self {
+impl VehicleStats {
+    pub fn default_for_type(wagon_type: VehicleType) -> Self {
         match wagon_type {
-            TrainUnitType::Locomotive => Self {
-                weight: 25000.0,
-                acceleration_power: 8.0,
-                braking_power: 10.0,
+            // Modelled after SBB Re 460.
+            VehicleType::Locomotive => Self {
+                weight: 84.0,
+                acceleration_power: 6100.0,
+                braking_weight: 105.0,
             },
-            TrainUnitType::Wagon => Self {
-                weight: 5000.0,
+            VehicleType::Wagon => Self {
+                weight: 50.0,
                 acceleration_power: 0.0,
-                braking_power: 5.0,
+                braking_weight: 50.0,
             },
         }
     }
 
     pub fn additive_identiy() -> Self {
-        WagonStats {
+        VehicleStats {
             weight: 0.,
             acceleration_power: 0.,
-            braking_power: 0.,
+            braking_weight: 0.,
         }
     }
 }
 
-impl Add<&WagonStats> for WagonStats {
-    type Output = WagonStats;
+impl Add<&VehicleStats> for VehicleStats {
+    type Output = VehicleStats;
 
-    fn add(self, rhs: &WagonStats) -> Self::Output {
-        WagonStats {
+    fn add(self, rhs: &VehicleStats) -> Self::Output {
+        VehicleStats {
             weight: self.weight + rhs.weight,
             acceleration_power: self.acceleration_power + rhs.acceleration_power,
-            braking_power: self.braking_power + rhs.braking_power,
+            braking_weight: self.braking_weight + rhs.braking_weight,
         }
     }
 }
 
-#[derive(Component, Serialize, Deserialize)]
-pub struct TrainHead {
-    /// A fractional index into path, where the front of the train is.
-    /// Must obey `length + 1 < path_progress <= path.len() - 1` (todo: check)
-    pub path_progress: f32,
-    /// Amount of wagons and locomotives. Must be equal to the number of TrainUnit children.
-    pub length: u32,
-    /// From 0 at the start to len at the destination. Must contain at least two values.
-    pub path: Vec<Joint>,
-}
-
-impl TrainHead {
+impl Train {
     /// Shortens the path to not contain any extra tiles in front
     pub fn trim_front(&mut self) {
         while self.path.len() as f32 > self.path_progress + 2.0 {
@@ -101,224 +148,52 @@ impl TrainHead {
     }
 }
 
-#[derive(Component, Serialize, Deserialize)]
-pub struct Velocity {
-    /// Current change of progress per tick. Should be non-negative
-    pub velocity: f32,
-    /// Current change of velocity per tick.
-    pub acceleration: f32,
-    /// Velocity will be clamped to this value.
-    pub max_velocity: f32,
-}
-
-#[derive(Bundle)]
-pub struct TrainBundle {
-    pub controller: TrainHead,
-    pub velocity: Velocity,
-
-    /// Currently always "Train" for inspection
-    pub name: Name,
-    /// always default, used for hierarchy
-    pub local_transform: Transform,
-    pub global_transform: GlobalTransform,
-    pub visiblity: VisibilityBundle,
-}
-
 impl TrainBundle {
-    pub fn new(controller: TrainHead, max_velocity: f32) -> Self {
+    pub fn new(controller: Train, max_velocity: f32) -> Self {
         Self {
-            controller: controller,
+            path: controller,
             velocity: Velocity {
                 velocity: 0.0,
-                acceleration: 0.0,
                 max_velocity: max_velocity,
             },
+            controller: Default::default(),
             name: Name::new("Train"),
-            local_transform: Default::default(),
-            global_transform: Default::default(),
-            visiblity: Default::default(),
+            spatial: Default::default(),
         }
     }
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum TrainUnitType {
-    Locomotive,
-    Wagon,
-}
-
-#[derive(Component)]
-pub struct TrainUnit {
-    /// Starting with 0, this is subtracted from the path progress
-    pub position: u32,
-}
-
-/// System to set the acceleration of the player driven train
-fn manual_train_driving(
-    mut train: Query<(&mut Velocity, &Children), With<PlayerControlledTrain>>,
-    stats: Query<&WagonStats>,
-    input: Res<Input<KeyCode>>,
+/// System to apply throttle/brake to the velocity
+fn tick_velocity(
+    time: Res<Time<Fixed>>,
+    mut train: Query<(&Controller, &mut Velocity, &Children)>,
+    stats: Query<&VehicleStats>,
 ) {
-    for (mut velocity, children) in train.iter_mut() {
+    for (controller, mut velocity, children) in train.iter_mut() {
         let total_stats = children
             .iter()
             .filter_map(|&id| stats.get(id).ok())
-            .fold(WagonStats::additive_identiy(), WagonStats::add);
+            .fold(VehicleStats::additive_identiy(), VehicleStats::add);
 
-        let mut acceleration = 0.0;
-        if input.pressed(KeyCode::Up) {
-            acceleration += total_stats.acceleration_power;
-        }
-        if input.pressed(KeyCode::Down) {
-            acceleration -= total_stats.braking_power;
-        }
-        // allow for somewhat of a one pedal drive
-        if acceleration == 0.0 {
-            acceleration = -10.0;
-        }
-        velocity.acceleration = acceleration / total_stats.weight;
+        let braking_fraction = total_stats.braking_weight / total_stats.weight;
+        // Since I couldn't get my hands on UIC Merkblatt 544-1, just use some guessed value.
+        let decceleration = controller.brake * 1.0 * braking_fraction; // in m/s²
+
+        // Maybe probably not super accurate acceleration model either.
+        let acceleration = controller.throttle * total_stats.acceleration_power
+            / total_stats.weight
+            / velocity.velocity.max(1.0);
+
+        let delta_velocity = (acceleration - decceleration) * time.delta_seconds();
+        velocity.velocity = (velocity.velocity + delta_velocity).clamp(0., velocity.max_velocity);
     }
 }
 
-/// System to extend the path of trains if necessary. Useful mosty for manual driving.
-fn auto_extend_train_path(
-    mut trains: Query<(&mut TrainHead, Option<&PlayerControlledTrain>)>,
-    input: Res<Input<KeyCode>>,
-    graph_res: Res<RailGraph>,
-) {
-    let graph = &graph_res.graph;
-    let preferrs_left = input.pressed(KeyCode::Left);
-    let preferrs_right = input.pressed(KeyCode::Right);
-    let preferred_direction = if preferrs_left == preferrs_right {
-        TrackType::Straight
-    } else if preferrs_left {
-        TrackType::CurvedLeft
-    } else {
-        TrackType::CurvedRight
-    };
-
-    for (mut train, is_player_controlled) in trains.iter_mut() {
-        let max_progress = (train.path.len() - 1) as f32;
-        // todo: does this put a hard limit on the velocity of player controlled trains?
-        // The 0.5 anticipates the future
-        if train.path_progress + 0.5 > max_progress {
-            let path_end = train
-                .path
-                .last()
-                .expect("TrainHead::path invariant broken: contains no elements")
-                .clone();
-            let mut next_tile = None;
-            graph
-                .edges_directed(path_end, EdgeDirection::Outgoing)
-                .for_each(|(this, next, _edge)| {
-                    // Prefer input direction, if this train is steered by a player
-                    if is_player_controlled.is_some()
-                        && (Track::from_joints(this, next))
-                            .expect("Invariant: graph only has track edges")
-                            .heading
-                            == preferred_direction
-                    {
-                        next_tile = Some(next);
-                    } else if next_tile.is_none() {
-                        next_tile = Some(next);
-                    }
-                });
-
-            if let Some(next_tile) = next_tile {
-                train.path.push(next_tile);
-                if train.path.len() >= train.length as usize + 5 {
-                    // The remove operation is there to stop the path from growing continiously.
-                    // But it does use O(n) time, but since n should stay constant this way, this
-                    // is fine.
-                    train.path.remove(0);
-                    train.path_progress -= 1.;
-                }
-            }
-        }
-    }
-}
-
-/// System to reverse a whole train on key press
-fn reverse_train_system(
-    mut trains: Query<(&mut TrainHead, &Velocity, &Children), With<PlayerControlledTrain>>,
-    mut wagons: Query<&mut TrainUnit>,
-    input: Res<Input<KeyCode>>,
-) {
-    if !input.just_pressed(KeyCode::R) {
-        return;
-    }
-    for (mut controller, velocity, children) in trains.iter_mut() {
-        if velocity.velocity != 0. {
-            info!("Cannot reverse moving train!");
-            continue;
-        }
-        // Reverse the path and use reversed edges
-        controller.path.reverse();
-        for d in controller.path.iter_mut() {
-            *d = d.opposite();
-        }
-        controller.path_progress =
-            controller.path.len() as f32 - controller.path_progress + controller.length as f32 - 1.;
-
-        // Allow the player to steer
-        controller.trim_front();
-
-        // Reverse the wagon indices
-        for &x in children.iter() {
-            if let Ok(mut wagon) = wagons.get_mut(x) {
-                wagon.position = controller.length - wagon.position - 1;
-            }
-        }
-    }
-}
-
-/// System to enter and exit trains on click
-/// This will likely get replace with circle colliders soon
-fn train_selection_system(
-    mut commands: Commands,
-    mut controlled_train: Query<(Entity, &mut Velocity), With<PlayerControlledTrain>>,
-    other_trains: Query<(Entity, &TrainHead), Without<PlayerControlledTrain>>,
-    mut click_event: EventReader<TileClickEvent>,
-) {
-    // copied from trainbuilder::train_builder
-    for ev in click_event.read() {
-        if let Ok((entity, mut velocity)) = controlled_train.get_single_mut() {
-            velocity.acceleration = 0.0;
-            commands.entity(entity).remove::<PlayerControlledTrain>();
-        }
-
-        if ev.side.is_none() {
-            continue;
-        }
-        let face = Joint {
-            tile: ev.coord,
-            side: ev.side.unwrap(),
-        };
-
-        for (entity, train) in other_trains.iter() {
-            // this might behave weird when clicking on long paths, but it should
-            // be fine, since this is temporary.
-            if train.path.contains(&face) {
-                info!("Selected train");
-                commands.entity(entity).insert(PlayerControlledTrain);
-                break;
-            }
-        }
-        break;
-    }
-}
-
-/// System to apply acceleration to the velocity
-fn tick_velocity(mut velocities: Query<&mut Velocity>) {
-    for mut velocity in velocities.iter_mut() {
-        velocity.velocity =
-            (velocity.velocity + velocity.acceleration).clamp(0., velocity.max_velocity);
-    }
-}
 /// Fixed timestep system to update the progress of the trains
-fn tick_trains(mut trains: Query<(&mut TrainHead, &Velocity)>) {
+fn tick_trains(time: Res<Time<Fixed>>, mut trains: Query<(&mut Train, &Velocity)>) {
     for (mut train, velocity) in trains.iter_mut() {
-        train.path_progress += velocity.velocity;
+        train.path_progress += velocity.velocity * time.delta_seconds() / METER_PER_TRACK;
+        // TODO: crash
         train.path_progress = train.path_progress.clamp(0., (train.path.len() - 1) as f32);
     }
 }
@@ -326,8 +201,8 @@ fn tick_trains(mut trains: Query<(&mut TrainHead, &Velocity)>) {
 /// System to update the transform of the train wagons.
 /// Precondition: progress <= path.len() - 1
 fn position_train_units(
-    mut train_wagons: Query<(&Parent, &mut Transform, &TrainUnit)>,
-    trains: Query<&TrainHead>,
+    mut train_wagons: Query<(&Parent, &mut Transform, &TrainIndex)>,
+    trains: Query<&Train>,
 ) {
     for (parent, mut transform, unit) in train_wagons.iter_mut() {
         let head = trains
@@ -349,8 +224,8 @@ fn position_train_units(
 /// Helper to change the `output` Transform to intrapolate the start and end position and rotation
 fn move_train_unit(output: &mut Transform, start: Joint, end: Joint, t: f32) {
     // todo: actually move in an arc and not linear
-    let start_pos = start.into_world_position();
-    let end_pos = end.into_world_position();
+    let start_pos = start.world_position();
+    let end_pos = end.world_position();
     let pos = start_pos * (1. - t) + end_pos * t;
     let start_angle = start.side.to_angle();
     let end_angle = end.side.to_angle();
@@ -360,4 +235,154 @@ fn move_train_unit(output: &mut Transform, start: Joint, end: Joint, t: f32) {
     let angle = start_angle + angle_diff * t;
     output.translation = pos.extend(output.translation.z);
     output.rotation = Quat::from_rotation_z(angle);
+}
+
+mod manual_driving {
+    use super::*;
+
+    /// System to extend the path of trains if necessary. Useful mosty for manual driving.
+    pub(super) fn auto_extend_train_path(
+        mut trains: Query<(&mut Train, Option<&PlayerControlledTrain>)>,
+        input: Res<Input<KeyCode>>,
+        graph_res: Res<RailGraph>,
+    ) {
+        let graph = &graph_res.graph;
+        let preferrs_left = input.pressed(KeyCode::Left);
+        let preferrs_right = input.pressed(KeyCode::Right);
+        let preferred_direction = if preferrs_left == preferrs_right {
+            TrackType::Straight
+        } else if preferrs_left {
+            TrackType::CurvedLeft
+        } else {
+            TrackType::CurvedRight
+        };
+
+        for (mut train, is_player_controlled) in trains.iter_mut() {
+            let max_progress = (train.path.len() - 1) as f32;
+            // todo: does this put a hard limit on the velocity of player controlled trains?
+            // The 0.5 anticipates the future
+            if train.path_progress + 0.5 > max_progress {
+                let path_end = train
+                    .path
+                    .last()
+                    .expect("TrainHead::path invariant broken: contains no elements")
+                    .clone();
+                let mut next_tile = None;
+                graph
+                    .edges_directed(path_end, EdgeDirection::Outgoing)
+                    .for_each(|(this, next, _edge)| {
+                        // Prefer input direction, if this train is steered by a player
+                        if is_player_controlled.is_some()
+                            && (Track::from_joints(this, next))
+                                .expect("Invariant: graph only has track edges")
+                                .heading
+                                == preferred_direction
+                        {
+                            next_tile = Some(next);
+                        } else if next_tile.is_none() {
+                            next_tile = Some(next);
+                        }
+                    });
+
+                if let Some(next_tile) = next_tile {
+                    train.path.push(next_tile);
+                    if train.path.len() >= train.length as usize + 5 {
+                        // The remove operation is there to stop the path from growing continiously.
+                        // But it does use O(n) time, but since n should stay constant this way, this
+                        // is fine.
+                        train.path.remove(0);
+                        train.path_progress -= 1.;
+                    }
+                }
+            }
+        }
+    }
+
+    /// System to set the acceleration of the player driven train
+    pub(super) fn throttling_system(
+        mut train: Query<&mut Controller, With<PlayerControlledTrain>>,
+        input: Res<Input<KeyCode>>,
+    ) {
+        for mut controller in train.iter_mut() {
+            controller.throttle = if input.pressed(KeyCode::Up) { 1. } else { 0. };
+            controller.brake = if input.pressed(KeyCode::Down) { 1. } else { 0. };
+
+            // allow for somewhat of a one pedal drive
+            if !input.pressed(KeyCode::Down) && !input.pressed(KeyCode::Up) {
+                controller.brake = 0.1;
+            }
+        }
+    }
+
+    /// System to reverse a whole train on key press
+    pub(super) fn reverse_train_system(
+        mut trains: Query<(&mut Train, &Velocity, &Children), With<PlayerControlledTrain>>,
+        mut wagons: Query<&mut TrainIndex>,
+        input: Res<Input<KeyCode>>,
+    ) {
+        if !input.just_pressed(KeyCode::R) {
+            return;
+        }
+        for (mut controller, velocity, children) in trains.iter_mut() {
+            if velocity.velocity != 0. {
+                info!("Cannot reverse moving train!");
+                continue;
+            }
+            // Reverse the path and use reversed edges
+            controller.path.reverse();
+            for d in controller.path.iter_mut() {
+                *d = d.opposite();
+            }
+            controller.path_progress = controller.path.len() as f32 - controller.path_progress
+                + controller.length as f32
+                - 1.;
+
+            // Allow the player to steer
+            controller.trim_front();
+
+            // Reverse the wagon indices
+            for &x in children.iter() {
+                if let Ok(mut wagon) = wagons.get_mut(x) {
+                    wagon.position = controller.length - wagon.position - 1;
+                }
+            }
+        }
+    }
+
+    /// System to enter and exit trains on click
+    /// This will likely get replace with circle colliders soon
+    pub(super) fn train_selection_system(
+        mut commands: Commands,
+        mut controlled_train: Query<(Entity, &mut Controller), With<PlayerControlledTrain>>,
+        other_trains: Query<(Entity, &Train), Without<PlayerControlledTrain>>,
+        mut click_event: EventReader<TileClickEvent>,
+    ) {
+        // copied from trainbuilder::train_builder
+        for ev in click_event.read() {
+            if let Ok((entity, mut control)) = controlled_train.get_single_mut() {
+                control.throttle = 0.0;
+                control.brake = 0.0;
+                commands.entity(entity).remove::<PlayerControlledTrain>();
+            }
+
+            if ev.side.is_none() {
+                continue;
+            }
+            let face = Joint {
+                tile: ev.coord,
+                side: ev.side.unwrap(),
+            };
+
+            for (entity, train) in other_trains.iter() {
+                // this might behave weird when clicking on long paths, but it should
+                // be fine, since this is temporary.
+                if train.path.contains(&face) {
+                    info!("Selected train");
+                    commands.entity(entity).insert(PlayerControlledTrain);
+                    break;
+                }
+            }
+            break;
+        }
+    }
 }

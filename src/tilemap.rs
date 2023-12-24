@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 // use bevy_inspector_egui::{bevy_egui::EguiContext, Inspectable};
 
-/// Tile width (edge to edge) in world units.
+/// The height (point to point) of the hexagons in world units.
 pub const TILE_SCALE: f32 = 0.5;
 const SQRT3_HALF: f32 = 0.866025404;
 
@@ -91,12 +91,8 @@ impl Tile {
 
     /// Returns the center of the tile in world units.
     pub fn world_pos(&self) -> Vec2 {
-        let (x, y) = (self.0, self.1);
-        let yy = y as f32 * TILE_SCALE;
-        Vec2::new(
-            x as f32 * TILE_SCALE * SQRT3_HALF + SQRT3_HALF / 2. * yy,
-            yy * 0.75,
-        )
+        let (x, y) = (self.0 as f32, self.1 as f32);
+        TILE_SCALE * Vec2::new(x * SQRT3_HALF + SQRT3_HALF / 2. * y, y * 0.75)
     }
 
     /// Returns the neighboring tile in the direction `dir`
@@ -183,7 +179,7 @@ impl Joint {
     }
 
     /// Returns the world position of the center of the grid edge that this face represents
-    pub fn into_world_position(self) -> Vec2 {
+    pub fn world_position(self) -> Vec2 {
         let origin = self.tile.world_pos();
         let angle = self.side.to_angle();
         let offset = Vec2::new(angle.cos(), angle.sin()) * TILE_SCALE / 2. * SQRT3_HALF;

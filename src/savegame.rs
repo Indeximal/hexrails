@@ -2,6 +2,7 @@ use std::{error::Error, fs};
 
 use bevy::{ecs::system::CommandQueue, prelude::*};
 use petgraph::graphmap::DiGraphMap;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::railroad::{spawn_rail, NetworkRoot, RailGraph, Track};
@@ -17,77 +18,92 @@ pub struct LoadSavePlugin;
 impl Plugin for LoadSavePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(PostStartup, initial_load_system)
-            .add_systems(Update, save_system);
+            .add_systems(Last, save_system);
     }
 }
 
 /// This is a struct holding all the data that will get saved.
-/// In order to avoid many clones this struct houses references, in order
-/// to load the data, the equivalent `LoadedGame` struct is used.
 ///
-/// *Make sure to keep these two structs the same!*
-#[derive(Serialize)]
-struct SavedGame<'a> {
+/// Actual data is wrapped in [`SerDeserCell`] so no clones need to be performed.
+#[derive(Serialize, Deserialize)]
+struct SaveGame<'a> {
     version: u32,
-    network: &'a RailGraph,
-    trains: Vec<SavedTrain<'a>>,
+    network: SerDeserCell<'a, RailGraph>,
+    trains: Vec<SaveTrain<'a>>,
 }
 
-#[derive(Deserialize)]
-struct LoadedGame {
-    version: u32,
-    network: RailGraph,
-    trains: Vec<LoadedTrain>,
+#[derive(Serialize, Deserialize)]
+/// contains the path and position of the whole train and all its wagons
+struct SaveTrain<'a> {
+    train: SerDeserCell<'a, Train>,
+    velocity: SerDeserCell<'a, Velocity>,
+    wagons: Vec<SaveWagon<'a>>,
 }
 
-impl Default for LoadedGame {
+/// contains the components of a individual wagon (or locomotive)
+#[derive(Serialize, Deserialize)]
+struct SaveWagon<'a> {
+    wagon_type: SerDeserCell<'a, VehicleType>,
+    stats: SerDeserCell<'a, VehicleStats>,
+}
+
+/// This is a new game.
+impl<'a> Default for SaveGame<'a> {
     fn default() -> Self {
         Self {
             version: CURRENT_SAVEGAME_VERSION,
-            network: RailGraph {
+            network: SerDeserCell::Deser(RailGraph {
                 graph: DiGraphMap::new(),
-            },
+            }),
             trains: Vec::new(),
         }
     }
 }
+impl<'a> SaveGame<'a> {
+    fn from_world(world: &'a mut World) -> Self {
+        let mut trains_query = world.query::<(Entity, &Children, &Train, &Velocity)>();
+        let mut wagons_query = world.query::<(&TrainIndex, &VehicleType, &VehicleStats)>();
 
-#[derive(Serialize)]
-/// contains the path and position of the whole train and all its wagons
-struct SavedTrain<'a> {
-    controller: &'a TrainHead,
-    velocity: &'a Velocity,
-    wagons: Vec<SavedWagon<'a>>,
-}
+        let mut trains = Vec::new();
+        for (_, children, head, velocity) in trains_query.iter(world) {
+            // Thanks a lot to https://stackoverflow.com/a/72605922/19331219
+            let mut wagons = (0..children.len()).map(|_| None).collect::<Vec<_>>();
+            for &child in children.iter() {
+                if let Ok((unit_id, unit_type, unit_stats)) = wagons_query.get(world, child) {
+                    let wagon = SaveWagon {
+                        wagon_type: SerDeserCell::Ser(&unit_type),
+                        stats: SerDeserCell::Ser(&unit_stats),
+                    };
+                    wagons[unit_id.position as usize] = Some(wagon);
+                }
+            }
+            let wagons = wagons.into_iter().map(Option::unwrap).collect();
 
-#[derive(Deserialize)]
-struct LoadedTrain {
-    controller: TrainHead,
-    velocity: Velocity,
-    wagons: Vec<LoadedWagon>,
-}
+            let train = SaveTrain {
+                train: SerDeserCell::Ser(&head),
+                velocity: SerDeserCell::Ser(&velocity),
+                wagons: wagons,
+            };
+            trains.push(train);
+        }
 
-/// contains the components of a individual wagon (or locomotive)
-#[derive(Serialize)]
-struct SavedWagon<'a> {
-    wagon_type: &'a TrainUnitType,
-    stats: &'a VehicleStats,
-}
-
-#[derive(Deserialize)]
-struct LoadedWagon {
-    wagon_type: TrainUnitType,
-    stats: VehicleStats,
+        let graph = world.resource::<RailGraph>();
+        SaveGame {
+            version: CURRENT_SAVEGAME_VERSION,
+            network: SerDeserCell::Ser(&graph),
+            trains: trains,
+        }
+    }
 }
 
 /// System to listen to keypresses and load/save the game accordingly
-fn save_system(mut world: &mut World) {
+fn save_system(world: &mut World) {
     let key_input = world.resource::<Input<KeyCode>>();
     if key_input.just_pressed(KeyCode::F6) {
-        save_game(&mut world);
+        save_game(world);
     } else if key_input.just_pressed(KeyCode::F5) {
-        clean_game(&mut world);
-        load_game(&mut world);
+        clean_game(world);
+        load_game(world);
     }
 }
 
@@ -97,44 +113,13 @@ fn initial_load_system(world: &mut World) {
 
 /// Helper to save the game
 fn save_game(world: &mut World) {
-    let mut trains_query = world.query::<(Entity, &Children, &TrainHead, &Velocity)>();
-    let mut wagons_query = world.query::<(&TrainUnit, &TrainUnitType, &VehicleStats)>();
-
-    let mut trains = Vec::new();
-    for (_, children, head, velocity) in trains_query.iter(world) {
-        // Thanks a lot to https://stackoverflow.com/a/72605922/19331219
-        let mut wagons = (0..children.len()).map(|_| None).collect::<Vec<_>>();
-        for &child in children.iter() {
-            if let Ok((unit_id, unit_type, unit_stats)) = wagons_query.get(world, child) {
-                let wagon = SavedWagon {
-                    wagon_type: unit_type,
-                    stats: unit_stats,
-                };
-                wagons[unit_id.position as usize] = Some(wagon);
-            }
-        }
-        let wagons = wagons.into_iter().map(Option::unwrap).collect();
-
-        let train = SavedTrain {
-            controller: head,
-            velocity: velocity,
-            wagons: wagons,
-        };
-        trains.push(train);
-    }
-
-    let graph = world.resource::<RailGraph>();
-    let savegame = SavedGame {
-        version: CURRENT_SAVEGAME_VERSION,
-        network: graph,
-        trains: trains,
-    };
+    let savegame = SaveGame::from_world(world);
     let savegame_data = serde_json::to_string(&savegame).expect("Couldn't serialize savegame");
     fs::write(SAVEGAME_PATH, savegame_data).expect("Couldn't write to file");
     info!("Saved game state");
 }
 
-/// This helper function takes the same query as save and instead despawns relevant entities
+/// This helper function despawns relevant entities which constitute a savegame state
 fn clean_game(world: &mut World) {
     let mut rail_root = world.query_filtered::<Entity, With<NetworkRoot>>();
     // This iter then collect then iter is possible because, no two matching entites are in hierachical relation.
@@ -142,15 +127,15 @@ fn clean_game(world: &mut World) {
         world.entity_mut(entity.clone()).despawn_recursive();
     }
 
-    let mut trains = world.query_filtered::<Entity, With<TrainHead>>();
+    let mut trains = world.query_filtered::<Entity, With<Train>>();
     for entity in trains.iter_mut(world).collect::<Vec<Entity>>().iter() {
         world.entity_mut(entity.clone()).despawn_recursive();
     }
 }
 
-fn load_savegame_file() -> Result<LoadedGame, Box<dyn Error>> {
+fn load_savegame_file() -> Result<SaveGame<'static>, Box<dyn Error>> {
     let savegame_data = fs::read_to_string(SAVEGAME_PATH)?;
-    let savegame: LoadedGame = serde_json::from_str(savegame_data.as_str())?;
+    let savegame: SaveGame = serde_json::from_str(savegame_data.as_str())?;
     info!("Loaded savegame v{}", savegame.version);
     // Todo: implement this, problem is, usually the from_str fails anyway, so this is unnesssery.
     // if savegame.version != CURRENT_SAVEGAME_VERSION {
@@ -168,7 +153,7 @@ fn load_game(world: &mut World) {
 
     let savegame = load_savegame_file().unwrap_or_else(|err| {
         info!("Creating new world, because: {}", err);
-        LoadedGame::default()
+        SaveGame::default()
     });
 
     let mut command_queue = CommandQueue::default();
@@ -181,20 +166,19 @@ fn load_game(world: &mut World) {
             wagons.push(spawn_wagon(
                 &mut commands,
                 atlases,
-                wagon.wagon_type,
-                wagon.stats,
-                index as u32,
+                wagon.wagon_type.get(),
+                wagon.stats.get(),
+                index as u16,
             ));
         }
 
         commands
             .spawn(TrainBundle {
-                controller: train.controller,
-                velocity: train.velocity,
-                name: Name::new("Loaded Train"),
-                local_transform: Transform::default(),
-                global_transform: GlobalTransform::default(),
-                visiblity: Default::default(),
+                path: train.train.get(),
+                velocity: train.velocity.get(),
+                controller: Default::default(),
+                name: Name::new("Train"),
+                spatial: Default::default(),
             })
             .push_children(&wagons);
     }
@@ -205,7 +189,8 @@ fn load_game(world: &mut World) {
         .insert(NetworkRoot)
         .insert(Name::new("Rail Network"))
         .id();
-    for (start, end, _edge) in savegame.network.graph.all_edges() {
+    let network = savegame.network.get();
+    for (start, end, _edge) in network.graph.all_edges() {
         let Some(tt) = Track::from_joints(start, end) else {
             error!("Broken Graph: edge which does not represent a track {start:?}->{end:?}");
             return;
@@ -216,5 +201,56 @@ fn load_game(world: &mut World) {
     }
 
     command_queue.apply(world);
-    world.insert_resource(savegame.network);
+    world.insert_resource(network);
+}
+
+/// In order to avoid many clones, this enum provides a Cow similar construct,
+/// but one where the data doesn't need to be clone and can only be inserted
+/// or fetched.
+///
+/// For a deserialized [`SerDeserCell`] it is garanteed that `get()` will not panic.
+enum SerDeserCell<'a, T>
+where
+    T: 'a,
+{
+    /// Borrowed data for serialization
+    Ser(&'a T),
+    /// Owned data for deserialization
+    Deser(T),
+}
+
+impl<'a, T> SerDeserCell<'a, T> {
+    fn get(self) -> T {
+        match self {
+            SerDeserCell::Ser(_) => panic!("get should only be called for owned data"),
+            SerDeserCell::Deser(x) => x,
+        }
+    }
+}
+
+impl<'a, T> Serialize for SerDeserCell<'a, T>
+where
+    T: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            SerDeserCell::Ser(x) => x.serialize(serializer),
+            SerDeserCell::Deser(x) => x.serialize(serializer),
+        }
+    }
+}
+
+impl<'a, 'de, T> Deserialize<'de> for SerDeserCell<'a, T>
+where
+    T: DeserializeOwned,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(Self::Deser(Deserialize::deserialize(deserializer)?))
+    }
 }
