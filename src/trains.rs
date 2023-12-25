@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::railroad::{RailGraph, Track, TrackType};
 use crate::tilemap::{Joint, TileClickEvent};
-use crate::ui::InteractingState;
 
 /// The length in meters that a single track covers.
 ///
@@ -29,8 +28,7 @@ impl Plugin for TrainPlugin {
                 Update,
                 manual_driving::train_selection_system
                     // after, so that acceleration gets cleared properly
-                    .after(manual_driving::throttling_system)
-                    .run_if(in_state(InteractingState::SelectTrain)),
+                    .after(manual_driving::throttling_system),
             );
     }
 }
@@ -238,6 +236,8 @@ fn move_train_unit(output: &mut Transform, start: Joint, end: Joint, t: f32) {
 }
 
 mod manual_driving {
+    use crate::ui::InteractingState;
+
     use super::*;
 
     /// System to extend the path of trains if necessary. Useful mosty for manual driving.
@@ -356,7 +356,17 @@ mod manual_driving {
         mut controlled_train: Query<(Entity, &mut Controller), With<PlayerControlledTrain>>,
         other_trains: Query<(Entity, &Train), Without<PlayerControlledTrain>>,
         mut click_event: EventReader<TileClickEvent>,
+        state: Res<State<InteractingState>>,
     ) {
+        match state.get() {
+            InteractingState::SelectTrain => {}
+            _ => {
+                // Events are irrelevant
+                click_event.clear();
+                return;
+            }
+        };
+
         // copied from trainbuilder::train_builder
         for ev in click_event.read() {
             if let Ok((entity, mut control)) = controlled_train.get_single_mut() {

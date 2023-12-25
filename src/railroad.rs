@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 pub struct RailRoadPlugin;
 impl Plugin for RailRoadPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, rail_builder.run_if(in_rail_placing_state));
+        app.add_systems(Update, rail_builder);
     }
 }
 
@@ -120,13 +120,6 @@ impl RailGraph {
     }
 }
 
-fn in_rail_placing_state(state: Res<State<InteractingState>>) -> bool {
-    match state.get() {
-        InteractingState::PlaceRails(_) => true,
-        _ => false,
-    }
-}
-
 /// This system tries to build rails both in the graph and with sprites when the mouse is clicked.
 fn rail_builder(
     mut commands: Commands,
@@ -136,14 +129,16 @@ fn rail_builder(
     root_query: Query<Entity, With<NetworkRoot>>,
     state: Res<State<InteractingState>>,
 ) {
-    let rail_graph = rail_graph.as_mut();
-    let root_entity = root_query.single();
     let rail_type = match state.get() {
         InteractingState::PlaceRails(v) => v.clone(),
-        _ => unreachable!(
-            "The run condition should insure that the rail builder is only run in the PlaceRails state!"
-        ),
+        _ => {
+            // Currently events are irrelevant
+            click_event.clear();
+            return;
+        }
     };
+    let rail_graph = rail_graph.as_mut();
+    let root_entity = root_query.single();
 
     for evt in click_event.read() {
         if let Some(side) = evt.side {

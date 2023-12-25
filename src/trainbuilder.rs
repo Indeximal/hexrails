@@ -13,7 +13,7 @@ pub struct TrainBuildingPlugin;
 
 impl Plugin for TrainBuildingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, train_builder.run_if(train_builder_condition));
+        app.add_systems(Update, train_builder);
     }
 }
 
@@ -37,13 +37,6 @@ impl Train {
     }
 }
 
-fn train_builder_condition(state: Res<State<InteractingState>>) -> bool {
-    match state.get() {
-        InteractingState::PlaceTrains(_) => true,
-        _ => false,
-    }
-}
-
 /// This system tries to place a train wagon or a new train on click
 fn train_builder(
     mut commands: Commands,
@@ -57,9 +50,11 @@ fn train_builder(
     let graph = rail_graph.as_ref();
     let wagon_type = match state.get() {
         InteractingState::PlaceTrains(v) => v.clone(),
-        _ => unreachable!(
-            "The run condition should insure that the train builder is only run in the PlaceTrains state!"
-        ),
+        _ => {
+            // Events are irrelevant
+            click_event.clear();
+            return;
+        }
     };
     for ev in click_event.read() {
         if ev.side.is_none() {

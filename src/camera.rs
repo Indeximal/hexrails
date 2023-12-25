@@ -8,7 +8,6 @@
 use bevy::prelude::*;
 use bevy::render::camera::ScalingMode;
 use bevy_pancam::{PanCam, PanCamPlugin};
-// use bevy_inspector_egui::bevy_egui::EguiContext;
 
 use crate::ASPECT_RATIO;
 

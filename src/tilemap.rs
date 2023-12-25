@@ -7,10 +7,10 @@
 
 use crate::camera::{current_cursor_world_pos, FlyCamera2d};
 use bevy::prelude::*;
+use bevy_inspector_egui::bevy_egui::EguiContext;
 use core::fmt;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
-// use bevy_inspector_egui::{bevy_egui::EguiContext, Inspectable};
 
 /// The height (point to point) of the hexagons in world units.
 pub const TILE_SCALE: f32 = 0.5;
@@ -224,18 +224,25 @@ fn mouse_button_events(
     mut click_event: EventWriter<TileClickEvent>,
     windows: Query<&Window>,
     cam: Query<(&GlobalTransform, &Camera), With<FlyCamera2d>>,
-    // mut egui_context: ResMut<EguiContext>,
+    mut egui_contexts: Query<&mut EguiContext>,
     other_buttons: Query<&Interaction>,
 ) {
     // Skip if the mouse is above a inspector window or other gui
-    // if egui_context.ctx_mut().wants_pointer_input() {
-    //     return;
-    // }
-    // todo: fix, this doesn't work yet
-    if other_buttons
+    // Can't be a run condition due to mutable context.
+    // <https://github.com/mvlabat/bevy_egui/issues/47>
+    // For some very stupid reason does `wants_pointer_input` return false for 1 frame,
+    // exactly when the mouse button is pressed.
+    let on_egui = egui_contexts
+        .iter_mut()
+        .any(|mut ctx| ctx.get_mut().is_pointer_over_area());
+    if on_egui {
+        return;
+    }
+
+    let on_bevy_ui = other_buttons
         .iter()
-        .any(|interact| *interact == Interaction::Pressed)
-    {
+        .any(|&interact| interact == Interaction::Pressed || interact == Interaction::Hovered);
+    if on_bevy_ui {
         return;
     }
 
