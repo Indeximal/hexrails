@@ -60,6 +60,27 @@ impl<'a> Default for SaveGame<'a> {
     }
 }
 impl<'a> SaveGame<'a> {
+    fn from_disk() -> Self {
+        fn load_savegame_file() -> Result<SaveGame<'static>, Box<dyn Error>> {
+            let savegame_data = fs::read_to_string(SAVEGAME_PATH)?;
+            let savegame: SaveGame = serde_json::from_str(savegame_data.as_str())?;
+            info!("Loaded savegame v{}", savegame.version);
+            // Todo: implement this, problem is, usually the from_str fails anyway, so this is unnesssery.
+            // if savegame.version != CURRENT_SAVEGAME_VERSION {
+            //     Err(format!(
+            //         "Savegame is not compatible: expected {}, was {}!",
+            //         CURRENT_SAVEGAME_VERSION, savegame.version
+            //     ))
+            // }
+            Ok(savegame)
+        }
+
+        load_savegame_file().unwrap_or_else(|err| {
+            info!("Creating new world, because: {}", err);
+            SaveGame::default()
+        })
+    }
+
     fn from_world(world: &'a mut World) -> Self {
         let mut trains_query = world.query::<(Entity, &Children, &Train, &Velocity)>();
         let mut wagons_query = world.query::<(&TrainIndex, &VehicleType, &VehicleStats)>();
@@ -103,12 +124,15 @@ fn save_system(world: &mut World) {
         save_game(world);
     } else if key_input.just_pressed(KeyCode::F5) {
         clean_game(world);
-        load_game(world);
+        load_game(world, SaveGame::from_disk());
+    } else if key_input.just_pressed(KeyCode::F7) {
+        clean_game(world);
+        load_game(world, SaveGame::default());
     }
 }
 
 fn initial_load_system(world: &mut World) {
-    load_game(world);
+    load_game(world, SaveGame::from_disk());
 }
 
 /// Helper to save the game
@@ -133,29 +157,9 @@ fn clean_game(world: &mut World) {
     }
 }
 
-fn load_savegame_file() -> Result<SaveGame<'static>, Box<dyn Error>> {
-    let savegame_data = fs::read_to_string(SAVEGAME_PATH)?;
-    let savegame: SaveGame = serde_json::from_str(savegame_data.as_str())?;
-    info!("Loaded savegame v{}", savegame.version);
-    // Todo: implement this, problem is, usually the from_str fails anyway, so this is unnesssery.
-    // if savegame.version != CURRENT_SAVEGAME_VERSION {
-    //     Err(format!(
-    //         "Savegame is not compatible: expected {}, was {}!",
-    //         CURRENT_SAVEGAME_VERSION, savegame.version
-    //     ))
-    // }
-    Ok(savegame)
-}
-
 /// Helper to spawn the dynamic game state from a savegame. Requires the state to be cleaned first.
-fn load_game(world: &mut World) {
+fn load_game(world: &mut World, savegame: SaveGame) {
     let atlases = world.resource::<SpriteAtlases>();
-
-    let savegame = load_savegame_file().unwrap_or_else(|err| {
-        info!("Creating new world, because: {}", err);
-        SaveGame::default()
-    });
-
     let mut command_queue = CommandQueue::default();
     let mut commands = Commands::new(&mut command_queue, world);
 

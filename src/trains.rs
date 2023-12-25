@@ -11,7 +11,7 @@ use crate::ui::InteractingState;
 /// The length in meters that a single track covers.
 ///
 /// I.e. the width of the hexagons and length of the vehicles in meters.
-const METER_PER_TRACK: f32 = 15.;
+const METER_PER_TRACK: f32 = 10.;
 
 pub struct TrainPlugin;
 impl Plugin for TrainPlugin {
@@ -62,10 +62,13 @@ pub struct Train {
 pub struct VehicleStats {
     /// Inertial mass in tons of this vehicle
     pub weight: f32,
-    /// TODO: convert to kW
-    pub acceleration_power: f32,
-    /// The "Bremsgewicht" of this vehicle in tons. See <https://de.wikipedia.org/wiki/Bremsgewicht>.
-    pub braking_weight: f32,
+    /// roughly in kN of force when full throttle.
+    pub acceleration_force: f32,
+    /// Roughly kN of force applied when braking.
+    ///
+    /// In the UIC, "Bremsgewicht" in tons is used, see <https://de.wikipedia.org/wiki/Bremsgewicht>,
+    /// but the relevant UIC Merkblatt 544-1 is not free and a constant force is easier.
+    pub braking_force: f32,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -104,16 +107,15 @@ pub struct PlayerControlledTrain;
 impl VehicleStats {
     pub fn default_for_type(wagon_type: VehicleType) -> Self {
         match wagon_type {
-            // Modelled after SBB Re 460.
             VehicleType::Locomotive => Self {
                 weight: 84.0,
-                acceleration_power: 6100.0,
-                braking_weight: 105.0,
+                acceleration_force: 300.0,
+                braking_force: 200.0,
             },
             VehicleType::Wagon => Self {
                 weight: 50.0,
-                acceleration_power: 0.0,
-                braking_weight: 50.0,
+                acceleration_force: 0.0,
+                braking_force: 40.0,
             },
         }
     }
@@ -121,8 +123,8 @@ impl VehicleStats {
     pub fn additive_identiy() -> Self {
         VehicleStats {
             weight: 0.,
-            acceleration_power: 0.,
-            braking_weight: 0.,
+            acceleration_force: 0.,
+            braking_force: 0.,
         }
     }
 }
@@ -133,8 +135,8 @@ impl Add<&VehicleStats> for VehicleStats {
     fn add(self, rhs: &VehicleStats) -> Self::Output {
         VehicleStats {
             weight: self.weight + rhs.weight,
-            acceleration_power: self.acceleration_power + rhs.acceleration_power,
-            braking_weight: self.braking_weight + rhs.braking_weight,
+            acceleration_force: self.acceleration_force + rhs.acceleration_force,
+            braking_force: self.braking_force + rhs.braking_force,
         }
     }
 }
@@ -175,14 +177,12 @@ fn tick_velocity(
             .filter_map(|&id| stats.get(id).ok())
             .fold(VehicleStats::additive_identiy(), VehicleStats::add);
 
-        let braking_fraction = total_stats.braking_weight / total_stats.weight;
-        // Since I couldn't get my hands on UIC Merkblatt 544-1, just use some guessed value.
-        let decceleration = controller.brake * 1.0 * braking_fraction; // in m/s²
+        // Model constant brake force
+        let decceleration = controller.brake * total_stats.braking_force / total_stats.weight;
 
-        // Maybe probably not super accurate acceleration model either.
-        let acceleration = controller.throttle * total_stats.acceleration_power
-            / total_stats.weight
-            / velocity.velocity.max(1.0);
+        // Model constant power force
+        let acceleration =
+            controller.throttle * total_stats.acceleration_force / total_stats.weight;
 
         let delta_velocity = (acceleration - decceleration) * time.delta_seconds();
         velocity.velocity = (velocity.velocity + delta_velocity).clamp(0., velocity.max_velocity);
