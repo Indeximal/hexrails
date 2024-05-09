@@ -5,7 +5,10 @@
 //! A "Track" is are two joints, which either form a single straight, single left-curving or
 //! single right-curving section.
 
-use crate::camera::{current_cursor_world_pos, FlyCamera2d};
+use crate::{
+    camera::{current_cursor_world_pos, FlyCamera2d},
+    input::{Action, GameInput},
+};
 use bevy::prelude::*;
 use bevy_inspector_egui::bevy_egui::EguiContext;
 use core::fmt;
@@ -220,7 +223,7 @@ impl fmt::Display for Tile {
 
 /// System for generating [`TileClickEvent`].
 fn mouse_button_events(
-    mousebtn: Res<Input<MouseButton>>,
+    game_input: Res<GameInput>,
     mut click_event: EventWriter<TileClickEvent>,
     windows: Query<&Window>,
     cam: Query<(&GlobalTransform, &Camera), With<FlyCamera2d>>,
@@ -260,7 +263,7 @@ fn mouse_button_events(
         }
     };
 
-    if mousebtn.just_pressed(MouseButton::Left) {
+    if game_input.just_pressed(&Action::Build) {
         let event = match Joint::from_world_pos(world_pos) {
             Ok(Joint { tile, side }) => TileClickEvent {
                 coord: tile,

@@ -2,6 +2,7 @@ use bevy::{log::LogPlugin, prelude::*};
 
 mod camera;
 mod debug;
+mod input;
 mod railroad;
 mod savegame;
 mod sprites;
@@ -15,7 +16,7 @@ pub const BG_COLOR: Color = Color::rgb(0.7, 0.7, 0.7);
 pub const ASPECT_RATIO: f32 = 16.0 / 9.0;
 
 fn main() {
-    let height = 900.0;
+    let height = 750.0;
     App::new()
         .insert_resource(ClearColor(BG_COLOR))
         .add_plugins(
@@ -33,6 +34,7 @@ fn main() {
                 .set(LogPlugin {
                     level: bevy::log::Level::DEBUG,
                     filter: "info,wgpu=error,naga=warn,hexrails=debug".into(),
+                    ..Default::default()
                 }),
         )
         .add_plugins(sprites::AssetPlugin)
@@ -45,5 +47,6 @@ fn main() {
         .add_plugins(trainbuilder::TrainBuildingPlugin)
         .add_plugins(trains::TrainPlugin)
         .add_plugins(ui::UIOverlayPlugin)
+        .add_plugins(input::InputPlugin)
         .run();
 }

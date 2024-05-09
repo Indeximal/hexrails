@@ -6,7 +6,7 @@ pub struct UIOverlayPlugin;
 
 impl Plugin for UIOverlayPlugin {
     fn build(&self, app: &mut App) {
-        app.add_state::<InteractingState>()
+        app.init_state::<InteractingState>()
             .add_systems(Startup, build_ui)
             .add_systems(Update, button_system)
             .add_systems(Update, button_hightlighting);

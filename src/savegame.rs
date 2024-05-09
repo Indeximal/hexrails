@@ -1,10 +1,12 @@
 use std::{error::Error, fs};
 
 use bevy::{ecs::system::CommandQueue, prelude::*};
+
 use petgraph::graphmap::DiGraphMap;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
+use crate::input::{Action, GameInput};
 use crate::railroad::{spawn_rail, NetworkRoot, RailGraph, Track};
 use crate::sprites::SpriteAtlases;
 use crate::trainbuilder::*;
@@ -119,13 +121,13 @@ impl<'a> SaveGame<'a> {
 
 /// System to listen to keypresses and load/save the game accordingly
 fn save_system(world: &mut World) {
-    let key_input = world.resource::<Input<KeyCode>>();
-    if key_input.just_pressed(KeyCode::F6) {
+    let key_input = world.resource::<GameInput>();
+    if key_input.just_pressed(&Action::Save) {
         save_game(world);
-    } else if key_input.just_pressed(KeyCode::F5) {
+    } else if key_input.just_pressed(&Action::Load) {
         clean_game(world);
         load_game(world, SaveGame::from_disk());
-    } else if key_input.just_pressed(KeyCode::F7) {
+    } else if key_input.just_pressed(&Action::LoadNew) {
         clean_game(world);
         load_game(world, SaveGame::default());
     }

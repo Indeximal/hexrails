@@ -9,7 +9,7 @@ use bevy::prelude::*;
 use bevy::render::camera::ScalingMode;
 use bevy_pancam::{PanCam, PanCamPlugin};
 
-use crate::ASPECT_RATIO;
+use crate::{input::GameInput, ASPECT_RATIO};
 
 pub struct MovingCameraPlugin;
 
@@ -43,14 +43,6 @@ pub struct FlyCamera2d {
     /// The current velocity of the FlyCamera2d. This value is always up-to-date, enforced by [FlyCameraPlugin](struct.FlyCameraPlugin.html)
     velocity: Vec2,
 
-    /// Key used to move left. Defaults to <kbd>A</kbd>
-    key_left: KeyCode,
-    /// Key used to move right. Defaults to <kbd>D</kbd>
-    key_right: KeyCode,
-    /// Key used to move up. Defaults to <kbd>W</kbd>
-    key_up: KeyCode,
-    /// Key used to move forward. Defaults to <kbd>S</kbd>
-    key_down: KeyCode,
     /// If `false`, disable keyboard control of the camera. Defaults to `true`
     enabled: bool,
 }
@@ -68,7 +60,7 @@ fn spawn_camera(mut commands: Commands) {
         .spawn(camera)
         .insert(FlyCamera2d::default())
         .insert(PanCam {
-            grab_buttons: vec![MouseButton::Right, MouseButton::Middle],
+            grab_buttons: vec![MouseButton::Left, MouseButton::Middle],
             enabled: true,
             zoom_to_cursor: true,
             min_scale: 0.5,
@@ -85,10 +77,6 @@ impl Default for FlyCamera2d {
             max_speed: 0.5 * MUL_2D,
             friction: 5.0 * MUL_2D,
             velocity: Vec2::ZERO,
-            key_left: KeyCode::A,
-            key_right: KeyCode::D,
-            key_up: KeyCode::W,
-            key_down: KeyCode::S,
             enabled: true,
         }
     }
@@ -102,28 +90,17 @@ pub fn current_cursor_world_pos(
     cam.viewport_to_world_2d(cam_pos, window.cursor_position()?)
 }
 
-fn movement_axis(input: &Res<Input<KeyCode>>, plus: KeyCode, minus: KeyCode) -> f32 {
-    let mut axis = 0.0;
-    if input.pressed(plus) {
-        axis += 1.0;
-    }
-    if input.pressed(minus) {
-        axis -= 1.0;
-    }
-    axis
-}
-
 fn camera_2d_movement_system(
     time: Res<Time>,
-    keyboard_input: Res<Input<KeyCode>>,
+    action_state: Res<GameInput>,
     mut query: Query<(&mut FlyCamera2d, &mut Transform)>,
 ) {
     for (mut options, mut transform) in query.iter_mut() {
         let (axis_h, axis_v) = if options.enabled {
-            (
-                movement_axis(&keyboard_input, options.key_right, options.key_left),
-                movement_axis(&keyboard_input, options.key_up, options.key_down),
-            )
+            let axis = action_state
+                .clamped_axis_pair(&crate::input::Action::CameraMove)
+                .expect("Camera Motion should be a dual axis");
+            (axis.x(), axis.y())
         } else {
             (0.0, 0.0)
         };

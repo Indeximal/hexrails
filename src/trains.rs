@@ -236,25 +236,27 @@ fn move_train_unit(output: &mut Transform, start: Joint, end: Joint, t: f32) {
 }
 
 mod manual_driving {
-    use crate::ui::InteractingState;
+    use crate::{
+        input::{Action, GameInput},
+        ui::InteractingState,
+    };
 
     use super::*;
 
     /// System to extend the path of trains if necessary. Useful mosty for manual driving.
     pub(super) fn auto_extend_train_path(
         mut trains: Query<(&mut Train, Option<&PlayerControlledTrain>)>,
-        input: Res<Input<KeyCode>>,
+        input: Res<GameInput>,
         graph_res: Res<RailGraph>,
     ) {
         let graph = &graph_res.graph;
-        let preferrs_left = input.pressed(KeyCode::Left);
-        let preferrs_right = input.pressed(KeyCode::Right);
-        let preferred_direction = if preferrs_left == preferrs_right {
-            TrackType::Straight
-        } else if preferrs_left {
+        let steer_value = input.value(&Action::SwitchDirection);
+        let preferred_direction = if steer_value > 0.0 {
+            TrackType::CurvedRight
+        } else if steer_value < 0.0 {
             TrackType::CurvedLeft
         } else {
-            TrackType::CurvedRight
+            TrackType::Straight
         };
 
         for (mut train, is_player_controlled) in trains.iter_mut() {
@@ -301,14 +303,14 @@ mod manual_driving {
     /// System to set the acceleration of the player driven train
     pub(super) fn throttling_system(
         mut train: Query<&mut Controller, With<PlayerControlledTrain>>,
-        input: Res<Input<KeyCode>>,
+        input: Res<GameInput>,
     ) {
         for mut controller in train.iter_mut() {
-            controller.throttle = if input.pressed(KeyCode::Up) { 1. } else { 0. };
-            controller.brake = if input.pressed(KeyCode::Down) { 1. } else { 0. };
+            controller.throttle = input.value(&Action::Accelerate);
+            controller.brake = input.value(&Action::Brake);
 
             // allow for somewhat of a one pedal drive
-            if !input.pressed(KeyCode::Down) && !input.pressed(KeyCode::Up) {
+            if !input.pressed(&Action::Brake) && !input.pressed(&Action::Accelerate) {
                 controller.brake = 0.1;
             }
         }
@@ -318,9 +320,9 @@ mod manual_driving {
     pub(super) fn reverse_train_system(
         mut trains: Query<(&mut Train, &Velocity, &Children), With<PlayerControlledTrain>>,
         mut wagons: Query<&mut TrainIndex>,
-        input: Res<Input<KeyCode>>,
+        input: Res<GameInput>,
     ) {
-        if !input.just_pressed(KeyCode::R) {
+        if !input.just_pressed(&Action::Reverse) {
             return;
         }
         for (mut controller, velocity, children) in trains.iter_mut() {
