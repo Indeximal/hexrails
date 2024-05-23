@@ -21,6 +21,9 @@ impl Plugin for MovingCameraPlugin {
     }
 }
 
+#[derive(Component)]
+pub struct WorldViewCam;
+
 /// From: https://github.com/mcpar-land/bevy_fly_camera
 /// A set of options for initializing a FlyCamera.
 /// Attach this component to a [`Camera2dBundle`](https://docs.rs/bevy/0.4.0/bevy/prelude/struct.Camera2dBundle.html)
@@ -33,7 +36,7 @@ impl Plugin for MovingCameraPlugin {
 ///     .with(FlyCamera2d::default());
 /// }
 #[derive(Component)]
-pub struct FlyCamera2d {
+struct FlyCamera2d {
     /// The speed the FlyCamera2d accelerates at.
     accel: f32,
     /// The maximum speed the FlyCamera can move at.
@@ -58,6 +61,7 @@ fn spawn_camera(mut commands: Commands) {
     };
     commands
         .spawn(camera)
+        .insert(WorldViewCam)
         .insert(FlyCamera2d::default())
         .insert(PanCam {
             grab_buttons: vec![MouseButton::Left, MouseButton::Middle],
@@ -80,14 +84,6 @@ impl Default for FlyCamera2d {
             enabled: true,
         }
     }
-}
-
-pub fn current_cursor_world_pos(
-    cam: &Camera,
-    cam_pos: &GlobalTransform,
-    window: &Window,
-) -> Option<Vec2> {
-    cam.viewport_to_world_2d(cam_pos, window.cursor_position()?)
 }
 
 fn camera_2d_movement_system(

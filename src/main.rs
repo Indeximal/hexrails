@@ -1,8 +1,10 @@
 use bevy::{log::LogPlugin, prelude::*};
+use interact::InteractPlugin;
 
 mod camera;
 mod debug;
 mod input;
+mod interact;
 mod railroad;
 mod savegame;
 mod sprites;
@@ -48,5 +50,6 @@ fn main() {
         .add_plugins(trains::TrainPlugin)
         .add_plugins(ui::UIOverlayPlugin)
         .add_plugins(input::InputPlugin)
+        .add_plugins(InteractPlugin)
         .run();
 }

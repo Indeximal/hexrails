@@ -5,7 +5,7 @@ use petgraph::EdgeDirection;
 use serde::{Deserialize, Serialize};
 
 use crate::railroad::{RailGraph, Track, TrackType};
-use crate::tilemap::{Joint, TileClickEvent};
+use crate::tilemap::Joint;
 
 /// The length in meters that a single track covers.
 ///
@@ -238,6 +238,7 @@ fn move_train_unit(output: &mut Transform, start: Joint, end: Joint, t: f32) {
 mod manual_driving {
     use crate::{
         input::{Action, GameInput},
+        interact::TileClickEvent,
         ui::InteractingState,
     };
 

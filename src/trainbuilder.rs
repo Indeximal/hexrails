@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use petgraph::EdgeDirection;
 
 use crate::{
+    interact::{InteractionNode, TileClickEvent},
     railroad::RailGraph,
     sprites::{SpriteAtlases, VehicleSprite},
     tilemap::*,
@@ -165,7 +166,7 @@ fn insert_wagon(
     commands.entity(parent).add_child(new_wagon);
 }
 
-// Helper to spawn a wagon sprite
+/// Helper to spawn a wagon sprite
 pub fn spawn_wagon(
     commands: &mut Commands,
     atlas: &SpriteAtlases,
@@ -185,6 +186,9 @@ pub fn spawn_wagon(
         })
         .insert(wagon_type)
         .insert(wagon_stats)
+        .insert(InteractionNode {
+            radius: TILE_SCALE / 3.,
+        })
         .insert(Name::new("Wagon"))
         .id()
 }
