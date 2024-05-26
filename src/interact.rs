@@ -10,8 +10,15 @@ pub struct InteractPlugin;
 impl Plugin for InteractPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<TileClickEvent>()
-            .add_systems(PreUpdate, mouse_button_events)
-            .add_systems(Update, draw_interaction_nodes);
+            // Ordering the event to be after the input, but still in PreUpdate,
+            // so in Update the events are available
+            .add_systems(
+                PreUpdate,
+                mouse_button_events
+                    .after(leafwing_input_manager::plugin::InputManagerSystem::Update),
+            )
+            .add_systems(Update, draw_interaction_nodes)
+            .add_systems(Update, event_logger);
     }
 }
 
@@ -60,28 +67,39 @@ fn mouse_button_events(
     click_event.send(event);
 }
 
+fn event_logger(mut evs: EventReader<TileClickEvent>) {
+    for ev in evs.read() {
+        trace!("TileClickEvent received: {:?}", ev.coord);
+    }
+}
+
 fn draw_interaction_nodes(
     nodes: Query<(&GlobalTransform, &InteractionNode)>,
     mut world_interaction: WorldInteractionQuery,
     mut gizmos: Gizmos,
 ) {
-    let Some(world_pos) = world_interaction.get_cursor_world_pos() else {
-        // Ignore out of bounds etc.
-        return;
-    };
+    let cursor_pos = world_interaction.get_cursor_world_pos();
 
     for (position, node) in &nodes {
         let position = position.translation();
 
-        let color = if position.xy().distance_squared(world_pos) < node.radius.powi(2) {
+        let color = if cursor_pos
+            .map(|p| p.distance_squared(position.xy()) < node.radius.powi(2))
+            .unwrap_or(false)
+        {
             // In range
             Color::ORANGE_RED
         } else {
-            // Out of range
-            Color::RED
+            // Out of range or cursor position not known
+            Color::GRAY
         };
 
-        gizmos.circle(position, Direction3d::Z, node.radius, color);
+        gizmos.circle(
+            position.xy().extend(0.0),
+            Direction3d::Z,
+            node.radius,
+            color,
+        );
     }
 }
 

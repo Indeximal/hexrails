@@ -1,5 +1,4 @@
 use bevy::{log::LogPlugin, prelude::*};
-use interact::InteractPlugin;
 
 mod camera;
 mod debug;
@@ -50,6 +49,6 @@ fn main() {
         .add_plugins(trains::TrainPlugin)
         .add_plugins(ui::UIOverlayPlugin)
         .add_plugins(input::InputPlugin)
-        .add_plugins(InteractPlugin)
+        .add_plugins(interact::InteractPlugin)
         .run();
 }
