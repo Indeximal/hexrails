@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use petgraph::EdgeDirection;
 
 use crate::{
-    interact::TileClickEvent,
+    interact::{InteractionNode, InteractionStatus, TileClickEvent},
     railroad::RailGraph,
     sprites::{SpriteAtlases, VehicleSprite},
     tilemap::*,
@@ -178,6 +178,26 @@ pub fn spawn_wagon(
         VehicleType::Wagon => VehicleSprite::GreyBox,
     });
 
+    let front_bumper = commands
+        .spawn(TransformBundle::from_transform(
+            Transform::from_translation(-Vec3::X * TILE_WIDTH / 2.),
+        ))
+        .insert(InteractionNode {
+            radius: TILE_WIDTH / 4.,
+        })
+        .insert(InteractionStatus::default())
+        .id();
+
+    let back_bumper = commands
+        .spawn(TransformBundle::from_transform(
+            Transform::from_translation(Vec3::X * TILE_WIDTH / 2.),
+        ))
+        .insert(InteractionNode {
+            radius: TILE_WIDTH / 4.,
+        })
+        .insert(InteractionStatus::default())
+        .id();
+
     commands
         .spawn(VehicleBundle {
             index: TrainIndex {
@@ -188,5 +208,7 @@ pub fn spawn_wagon(
             name: Name::new("Wagon"),
             visuals: sprite,
         })
+        .add_child(front_bumper)
+        .add_child(back_bumper)
         .id()
 }

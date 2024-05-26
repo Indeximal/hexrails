@@ -12,6 +12,8 @@ use std::f32::consts::PI;
 
 /// The height (point to point) of the hexagons in world units.
 pub const TILE_SCALE: f32 = 0.5;
+/// The width (edge to edge) of the hexagons in world units.
+pub const TILE_WIDTH: f32 = SQRT3_HALF * TILE_SCALE;
 const SQRT3_HALF: f32 = 0.866025404;
 
 pub struct TileMapPlugin;
