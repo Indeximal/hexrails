@@ -18,7 +18,7 @@ impl Plugin for TrainBuildingPlugin {
     }
 }
 
-impl Train {
+impl Trail {
     /// Returns the index of the wagon currently nearest to `face` or `length` if at the end.
     /// Returns none if the face is not on the path or not near any wagon.
     pub fn index_for_tile(&self, face: Joint) -> Option<u16> {
@@ -45,7 +45,7 @@ fn train_builder(
     mut click_event: EventReader<TileClickEvent>,
     rail_graph: Res<RailGraph>,
     state: Res<State<InteractingState>>,
-    mut trains: Query<(Entity, &Children, &mut Train)>,
+    mut trains: Query<(Entity, &Children, &mut Trail)>,
     wagons: Query<&mut TrainIndex>,
 ) {
     let graph = rail_graph.as_ref();
@@ -129,14 +129,13 @@ fn create_new_train(
 
     commands
         .spawn(TrainBundle::new(
-            Train {
+            Trail {
                 path: vec![face, next_face],
                 path_progress: 1.0,
                 length: 1,
             },
             55.0, // approx 200kmh
         ))
-        .insert(VisibilityBundle::default())
         .add_child(first_wagon);
 }
 
@@ -180,15 +179,17 @@ pub fn spawn_wagon(
     });
 
     commands
-        .spawn(sprite)
-        .insert(TrainIndex {
-            position: insert_index,
+        .spawn(VehicleBundle {
+            index: TrainIndex {
+                position: insert_index,
+            },
+            tyype: wagon_type,
+            stats: wagon_stats,
+            name: Name::new("Wagon"),
+            visuals: sprite,
         })
-        .insert(wagon_type)
-        .insert(wagon_stats)
         .insert(InteractionNode {
             radius: TILE_SCALE / 3.,
         })
-        .insert(Name::new("Wagon"))
         .id()
 }

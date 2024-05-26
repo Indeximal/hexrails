@@ -37,7 +37,7 @@ struct SaveGame<'a> {
 #[derive(Serialize, Deserialize)]
 /// contains the path and position of the whole train and all its wagons
 struct SaveTrain<'a> {
-    train: SerDeserCell<'a, Train>,
+    train: SerDeserCell<'a, Trail>,
     velocity: SerDeserCell<'a, Velocity>,
     wagons: Vec<SaveWagon<'a>>,
 }
@@ -84,7 +84,7 @@ impl<'a> SaveGame<'a> {
     }
 
     fn from_world(world: &'a mut World) -> Self {
-        let mut trains_query = world.query::<(Entity, &Children, &Train, &Velocity)>();
+        let mut trains_query = world.query::<(Entity, &Children, &Trail, &Velocity)>();
         let mut wagons_query = world.query::<(&TrainIndex, &VehicleType, &VehicleStats)>();
 
         let mut trains = Vec::new();
@@ -153,7 +153,7 @@ fn clean_game(world: &mut World) {
         world.entity_mut(entity.clone()).despawn_recursive();
     }
 
-    let mut trains = world.query_filtered::<Entity, With<Train>>();
+    let mut trains = world.query_filtered::<Entity, With<Trail>>();
     for entity in trains.iter_mut(world).collect::<Vec<Entity>>().iter() {
         world.entity_mut(entity.clone()).despawn_recursive();
     }

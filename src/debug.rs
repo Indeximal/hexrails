@@ -5,7 +5,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 use crate::railroad::RailGraph;
 use crate::tilemap::{Joint, TILE_SCALE};
-use crate::trains::{PlayerControlledTrain, Train, Velocity};
+use crate::trains::{PlayerControlledTrain, Trail, Velocity};
 
 pub struct DebugPlugin;
 impl Plugin for DebugPlugin {
@@ -16,6 +16,9 @@ impl Plugin for DebugPlugin {
                 .add_systems(Update, draw_rail_graph)
                 .add_systems(Update, draw_train_paths);
         }
+        // For framerate:
+        // .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
+        // .add_plugins(bevy::diagnostic::LogDiagnosticsPlugin::default())
     }
 }
 
@@ -33,7 +36,7 @@ fn draw_rail_graph(graph: Res<RailGraph>, mut gizmos: Gizmos) {
     }
 }
 
-fn draw_train_paths(trains: Query<(&Train, Option<&PlayerControlledTrain>)>, mut gizmos: Gizmos) {
+fn draw_train_paths(trains: Query<(&Trail, Option<&PlayerControlledTrain>)>, mut gizmos: Gizmos) {
     for (train, player_control) in trains.iter() {
         for wnd in train.path.windows(2) {
             let from = wnd[0];

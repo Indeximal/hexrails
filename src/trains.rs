@@ -33,9 +33,12 @@ impl Plugin for TrainPlugin {
     }
 }
 
+/// The componets of an entity that make up a logical train.
+///
+/// Wagons and locomotives are children of this entity with components of [`VehicleBundle`].
 #[derive(Bundle)]
 pub struct TrainBundle {
-    pub path: Train,
+    pub path: Trail,
     pub velocity: Velocity,
     pub controller: Controller,
 
@@ -45,8 +48,19 @@ pub struct TrainBundle {
     pub spatial: SpatialBundle,
 }
 
+#[derive(Bundle)]
+pub struct VehicleBundle {
+    pub index: TrainIndex,
+    pub tyype: VehicleType,
+    pub stats: VehicleStats,
+    pub name: Name,
+
+    /// The visuals, including transform and visibility.
+    pub visuals: SpriteSheetBundle,
+}
+
 #[derive(Component, Serialize, Deserialize)]
-pub struct Train {
+pub struct Trail {
     /// From 0 at the start to len at the destination. Must contain at least `length + 1` values.
     pub path: Vec<Joint>,
     /// A fractional index into path, where the front of the train is.
@@ -139,7 +153,7 @@ impl Add<&VehicleStats> for VehicleStats {
     }
 }
 
-impl Train {
+impl Trail {
     /// Shortens the path to not contain any extra tiles in front
     pub fn trim_front(&mut self) {
         while self.path.len() as f32 > self.path_progress + 2.0 {
@@ -149,12 +163,12 @@ impl Train {
 }
 
 impl TrainBundle {
-    pub fn new(controller: Train, max_velocity: f32) -> Self {
+    pub fn new(trail: Trail, max_velocity: f32) -> Self {
         Self {
-            path: controller,
+            path: trail,
             velocity: Velocity {
                 velocity: 0.0,
-                max_velocity: max_velocity,
+                max_velocity,
             },
             controller: Default::default(),
             name: Name::new("Train"),
@@ -188,7 +202,7 @@ fn tick_velocity(
 }
 
 /// Fixed timestep system to update the progress of the trains
-fn tick_trains(time: Res<Time<Fixed>>, mut trains: Query<(&mut Train, &Velocity)>) {
+fn tick_trains(time: Res<Time<Fixed>>, mut trains: Query<(&mut Trail, &Velocity)>) {
     for (mut train, velocity) in trains.iter_mut() {
         train.path_progress += velocity.velocity * time.delta_seconds() / METER_PER_TRACK;
         // TODO: crash
@@ -200,7 +214,7 @@ fn tick_trains(time: Res<Time<Fixed>>, mut trains: Query<(&mut Train, &Velocity)
 /// Precondition: progress <= path.len() - 1
 fn position_train_units(
     mut train_wagons: Query<(&Parent, &mut Transform, &TrainIndex)>,
-    trains: Query<&Train>,
+    trains: Query<&Trail>,
 ) {
     for (parent, mut transform, unit) in train_wagons.iter_mut() {
         let head = trains
@@ -246,7 +260,7 @@ mod manual_driving {
 
     /// System to extend the path of trains if necessary. Useful mosty for manual driving.
     pub(super) fn auto_extend_train_path(
-        mut trains: Query<(&mut Train, Option<&PlayerControlledTrain>)>,
+        mut trains: Query<(&mut Trail, Option<&PlayerControlledTrain>)>,
         input: Res<GameInput>,
         graph_res: Res<RailGraph>,
     ) {
@@ -319,7 +333,7 @@ mod manual_driving {
 
     /// System to reverse a whole train on key press
     pub(super) fn reverse_train_system(
-        mut trains: Query<(&mut Train, &Velocity, &Children), With<PlayerControlledTrain>>,
+        mut trains: Query<(&mut Trail, &Velocity, &Children), With<PlayerControlledTrain>>,
         mut wagons: Query<&mut TrainIndex>,
         input: Res<GameInput>,
     ) {
@@ -357,7 +371,7 @@ mod manual_driving {
     pub(super) fn train_selection_system(
         mut commands: Commands,
         mut controlled_train: Query<(Entity, &mut Controller), With<PlayerControlledTrain>>,
-        other_trains: Query<(Entity, &Train), Without<PlayerControlledTrain>>,
+        other_trains: Query<(Entity, &Trail), Without<PlayerControlledTrain>>,
         mut click_event: EventReader<TileClickEvent>,
         state: Res<State<InteractingState>>,
     ) {
