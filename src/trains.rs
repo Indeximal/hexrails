@@ -33,7 +33,7 @@ impl Plugin for TrainPlugin {
     }
 }
 
-/// The componets of an entity that make up a logical train.
+/// The components of an entity that make up a logical train.
 ///
 /// Wagons and locomotives are children of this entity with components of [`VehicleBundle`].
 #[derive(Bundle)]
@@ -48,6 +48,9 @@ pub struct TrainBundle {
     pub spatial: SpatialBundle,
 }
 
+/// A single vehicle, child to a [`TrainBundle`] entity.
+///
+/// Also has colliders as children.
 #[derive(Bundle)]
 pub struct VehicleBundle {
     pub index: TrainIndex,
@@ -64,7 +67,7 @@ pub struct Trail {
     /// From 0 at the start to len at the destination. Must contain at least `length + 1` values.
     pub path: Vec<Joint>,
     /// A fractional index into path, where the front of the train is.
-    /// Must obey `length + 1 < path_progress <= path.len() - 1` (todo: check)
+    /// Must obey `length <= path_progress <= path.len() - 1` (todo: check)
     pub path_progress: f32,
     /// Amount of wagons and locomotives. Must be equal to the number of [`TrainIndex`] children.
     pub length: u16,
@@ -93,6 +96,13 @@ pub enum VehicleType {
 pub struct TrainIndex {
     /// Starting with 0, this is subtracted from [`Train::path_progress`].
     pub position: u16,
+}
+
+/// The component attached to the collider children of vehicles.
+#[derive(Component)]
+pub enum BumperNode {
+    Front,
+    Back,
 }
 
 #[derive(Component, Reflect, Serialize, Deserialize)]
@@ -159,6 +169,14 @@ impl Trail {
         while self.path.len() as f32 > self.path_progress + 2.0 {
             self.path.pop();
         }
+    }
+
+    /// True if all (locally checkable) invariants are okay.
+    #[inline]
+    pub fn check_invariant(&self) -> bool {
+        (self.path.len() >= self.length as usize + 1)
+            && (self.path_progress >= self.length as f32 - 0.01)
+            && (self.path_progress <= self.path.len() as f32 - 0.99)
     }
 }
 
@@ -252,7 +270,7 @@ fn move_train_unit(output: &mut Transform, start: Joint, end: Joint, t: f32) {
 mod manual_driving {
     use crate::{
         input::{Action, GameInput},
-        interact::TileClickEvent,
+        interact::NodeClickEvent,
         ui::InteractingState,
     };
 
@@ -367,13 +385,13 @@ mod manual_driving {
     }
 
     /// System to enter and exit trains on click
-    /// This will likely get replace with circle colliders soon
     pub(super) fn train_selection_system(
         mut commands: Commands,
-        mut controlled_train: Query<(Entity, &mut Controller), With<PlayerControlledTrain>>,
-        other_trains: Query<(Entity, &Trail), Without<PlayerControlledTrain>>,
-        mut click_event: EventReader<TileClickEvent>,
         state: Res<State<InteractingState>>,
+        mut click_event: EventReader<NodeClickEvent>,
+        mut controlled_train: Query<(Entity, &mut Controller), With<PlayerControlledTrain>>,
+        bumpers: Query<&Parent, With<BumperNode>>,
+        vehicles: Query<&Parent>,
     ) {
         match state.get() {
             InteractingState::SelectTrain => {}
@@ -384,32 +402,29 @@ mod manual_driving {
             }
         };
 
-        // copied from trainbuilder::train_builder
-        for ev in click_event.read() {
-            if let Ok((entity, mut control)) = controlled_train.get_single_mut() {
-                control.throttle = 0.0;
-                control.brake = 0.0;
-                commands.entity(entity).remove::<PlayerControlledTrain>();
-            }
+        // Skip all old events, why not. (please let this not lead to a bug xD)
+        let Some(ev) = click_event.read().last() else {
+            return;
+        };
+        let Ok(bump_parent) = bumpers.get(ev.node) else {
+            return;
+        };
+        let Ok(vehicle_parent) = vehicles.get(bump_parent.get()) else {
+            error!("BumperNode should always be attached to a vehicle!");
+            return;
+        };
 
-            if ev.side.is_none() {
-                continue;
-            }
-            let face = Joint {
-                tile: ev.coord,
-                side: ev.side.unwrap(),
-            };
-
-            for (entity, train) in other_trains.iter() {
-                // this might behave weird when clicking on long paths, but it should
-                // be fine, since this is temporary.
-                if train.path.contains(&face) {
-                    info!("Selected train");
-                    commands.entity(entity).insert(PlayerControlledTrain);
-                    break;
-                }
-            }
-            break;
+        // Remove player control from previously active train and release all control.
+        if let Ok((entity, mut control)) = controlled_train.get_single_mut() {
+            control.throttle = 0.0;
+            control.brake = 0.0;
+            commands.entity(entity).remove::<PlayerControlledTrain>();
         }
+
+        commands
+            .entity(vehicle_parent.get())
+            .insert(PlayerControlledTrain);
+
+        info!("Selected train");
     }
 }

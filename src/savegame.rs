@@ -167,6 +167,12 @@ fn load_game(world: &mut World, savegame: SaveGame) {
 
     // Trains
     for train in savegame.trains {
+        let trail = train.train.get();
+        if !trail.check_invariant() {
+            error!("savegame contains broken trail, skipping loading this train");
+            continue;
+        }
+
         let mut wagons = Vec::new();
         for (index, wagon) in train.wagons.into_iter().enumerate() {
             wagons.push(spawn_wagon(
@@ -180,7 +186,7 @@ fn load_game(world: &mut World, savegame: SaveGame) {
 
         commands
             .spawn(TrainBundle {
-                path: train.train.get(),
+                path: trail,
                 velocity: train.velocity.get(),
                 controller: Default::default(),
                 name: Name::new("Train"),
