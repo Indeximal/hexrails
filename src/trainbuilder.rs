@@ -15,8 +15,11 @@ pub struct TrainBuildingPlugin;
 impl Plugin for TrainBuildingPlugin {
     fn build(&self, app: &mut App) {
         let label = app.world.register_system(reindex_system_command);
-        app.add_systems(Update, (train_builder, uncoupling_system))
-            .insert_resource(ReindexSystemLabel(label));
+        app.add_systems(
+            Update,
+            (train_builder, uncoupling_system, append_vehicle_system),
+        )
+        .insert_resource(ReindexSystemLabel(label));
     }
 }
 
@@ -26,6 +29,9 @@ struct ReindexSystemLabel(SystemId<(Vec<Entity>, Entity, u16, u16)>);
 impl Trail {
     /// Returns the index of the wagon currently nearest to `face` or `length` if at the end.
     /// Returns none if the face is not on the path or not near any wagon.
+    ///
+    /// Currently unused, but maybe useful in the future...
+    #[allow(dead_code)]
     pub fn index_for_tile(&self, face: Joint) -> Option<u16> {
         if self.path_progress - self.length as f32 <= 1. {
             // no space for a new wagon
@@ -43,34 +49,29 @@ impl Trail {
     }
 }
 
-/// This system tries to place a train wagon or a new train on click
+/// This system tries to place a new train on click
 fn train_builder(
     mut commands: Commands,
     atlas: Res<SpriteAtlases>,
     mut click_event: EventReader<TileClickEvent>,
     rail_graph: Res<RailGraph>,
     state: Res<State<InteractingState>>,
-    mut trains: Query<(Entity, &Children, &mut Trail)>,
-    wagons: Query<&mut TrainIndex>,
 ) {
     let graph = rail_graph.as_ref();
-    let wagon_type = match state.get() {
-        InteractingState::PlaceTrains(v) => v.clone(),
-        _ => {
-            // Events are irrelevant
-            click_event.clear();
-            return;
-        }
+    let InteractingState::PlaceTrains(wagon_type) = state.get() else {
+        // Events are irrelevant
+        click_event.clear();
+        return;
     };
+
     for ev in click_event.read() {
-        if ev.side.is_none() {
+        let Some(side) = ev.side else {
             // for now ignore clicks in the center: might be ambigous
             continue;
-        }
-        // todo: also consider the opposite tile face
+        };
         let face = Joint {
             tile: ev.coord,
-            side: ev.side.unwrap(),
+            side,
         };
         let neighbor_count = graph
             .graph
@@ -81,29 +82,66 @@ fn train_builder(
             continue;
         }
 
-        let mut found_train = false;
-        for (parent, children, mut train) in trains.iter_mut() {
-            if let Some(new_index) = train.index_for_tile(face) {
-                insert_wagon(
-                    &mut commands,
-                    &atlas,
-                    children,
-                    wagons,
-                    parent,
-                    wagon_type.clone(),
-                    VehicleStats::default_for_type(wagon_type),
-                    new_index,
-                );
-                train.length += 1;
-                found_train = true;
-                break;
+        create_new_train(&mut commands, &atlas, face, &graph, *wagon_type);
+    }
+}
+
+/// Temporary dev testing system to add vehicles to the end of trains.
+///
+/// Removed support for inserting at beginning or middle since it isn't planned feature.
+///
+/// FIXME: this is slightly fucked if you have a train without power, as you cannot extend
+/// the path without driving right now.
+fn append_vehicle_system(
+    state: Res<State<InteractingState>>,
+    mut trigger: EventReader<TrainClickEvent>,
+    trains: Query<&Trail>,
+    mut commands: Commands,
+    atlas: Res<SpriteAtlases>,
+) {
+    let InteractingState::PlaceTrains(wagon_type) = state.get() else {
+        // Events are irrelevant
+        trigger.clear();
+        return;
+    };
+
+    for ev in trigger.read() {
+        let train_id = ev.train;
+        let Ok(trail) = trains.get(train_id) else {
+            warn!("Mismatch train query");
+            continue;
+        };
+        if ev.bumper_index != trail.length {
+            // Can only append at the end
+            continue;
+        }
+        if trail.length as f32 + 1. > trail.path_progress {
+            warn!("Cannot append vehicle to train {train_id:?} since the trail is too short");
+            continue;
+        }
+
+        debug!("Appending a vehicle to train {train_id:?}");
+
+        let new_wagon = spawn_wagon(
+            &mut commands,
+            &atlas,
+            *wagon_type,
+            VehicleStats::default_for_type(*wagon_type),
+            ev.bumper_index,
+        );
+        commands.entity(train_id).add_child(new_wagon);
+        commands.add(move |world: &mut World| {
+            let mut train_q = world.query::<&mut Trail>();
+            let Ok(mut trail) = train_q.get_mut(world, train_id) else {
+                warn!("appending to probably despawned train ?!");
+                return;
+            };
+            trail.length += 1;
+            if !trail.check_invariant() {
+                // This could be due to a bad interleaving...
+                error!("adding vehicle broke invariant even though it was checked!");
             }
-        }
-        if !found_train {
-            create_new_train(&mut commands, &atlas, face, &graph, wagon_type);
-        }
-        // todo: remove limit for one click per frame, needed for borrow checker. (Why?)
-        break;
+        });
     }
 }
 
@@ -146,16 +184,18 @@ fn uncoupling_system(
             .map(|(e, _)| e)
             .collect::<Vec<_>>();
 
+        let mut back_trail = Trail {
+            // This shouldn't break any trail invariants...
+            path: trail.path.clone(),
+            path_progress: trail.path_progress - front_length as f32,
+            length: back_length,
+        };
+        back_trail.trim_front();
+
         let reindex_command = reindex_command.0.clone();
         commands
             .spawn(TrainBundle::new(
-                Trail {
-                    // This shouldn't break any trail invariants...
-                    path: trail.path.clone(),
-                    path_progress: trail.path_progress - front_length as f32,
-                    length: back_length,
-                },
-                55.0, // approx 200kmh
+                back_trail, 55.0, // approx 200kmh
             ))
             .push_children(&to_reparent);
         commands.add(move |world: &mut World| {
@@ -226,32 +266,6 @@ fn create_new_train(
             55.0, // approx 200kmh
         ))
         .add_child(first_wagon);
-}
-
-/// Helper to insert a wagon into an existing train and move all other wagons accordingly
-fn insert_wagon(
-    commands: &mut Commands,
-    atlas: &SpriteAtlases,
-    sibling_ids: &Children,
-    mut sibling_query: Query<&mut TrainIndex>,
-    parent: Entity,
-    wagon_type: VehicleType,
-    wagon_stats: VehicleStats,
-    insert_index: u16,
-) {
-    info!("Inserting wagon at {}", insert_index);
-
-    // Shift wagons back
-    for sibling_id in sibling_ids.iter() {
-        if let Ok(mut sibling) = sibling_query.get_mut(sibling_id.clone()) {
-            if sibling.position >= insert_index {
-                sibling.position += 1;
-            }
-        }
-    }
-
-    let new_wagon = spawn_wagon(commands, atlas, wagon_type, wagon_stats, insert_index);
-    commands.entity(parent).add_child(new_wagon);
 }
 
 /// Helper to spawn a wagon sprite

@@ -1,7 +1,6 @@
 /// Module for manually driving a train, including selection, throttle, brake and reverse.
 use crate::{
     input::{Action, GameInput},
-    interact::NodeClickEvent,
     railroad::{RailGraph, Track, TrackType},
     trains::*,
     ui::InteractingState,
@@ -138,10 +137,8 @@ fn reverse_train_system(
 fn train_selection_system(
     mut commands: Commands,
     state: Res<State<InteractingState>>,
-    mut click_event: EventReader<NodeClickEvent>,
+    mut click_event: EventReader<TrainClickEvent>,
     mut controlled_train: Query<(Entity, &mut Controller), With<PlayerControlledTrain>>,
-    bumpers: Query<&Parent, With<BumperNode>>,
-    vehicles: Query<&Parent>,
 ) {
     match state.get() {
         InteractingState::SelectTrain => {}
@@ -156,13 +153,6 @@ fn train_selection_system(
     let Some(ev) = click_event.read().last() else {
         return;
     };
-    let Ok(bump_parent) = bumpers.get(ev.node) else {
-        return;
-    };
-    let Ok(vehicle_parent) = vehicles.get(bump_parent.get()) else {
-        error!("BumperNode should always be attached to a vehicle!");
-        return;
-    };
 
     // Remove player control from previously active train and release all control.
     if let Ok((entity, mut control)) = controlled_train.get_single_mut() {
@@ -171,9 +161,7 @@ fn train_selection_system(
         commands.entity(entity).remove::<PlayerControlledTrain>();
     }
 
-    commands
-        .entity(vehicle_parent.get())
-        .insert(PlayerControlledTrain);
+    commands.entity(ev.train).insert(PlayerControlledTrain);
 
-    info!("Selected train {:?}", vehicle_parent.get());
+    debug!("Selected train {:?}", ev.train);
 }
