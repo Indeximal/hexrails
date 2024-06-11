@@ -8,6 +8,9 @@
 //! a node event will be emitted for every node which is active, but only
 //! one will have the `primary` flag set.
 //!
+//! Everything is updated in `PreUpdate`, if you need to run anything dependent,
+//! use `.after()` with [`InteractSet`].
+//!
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -29,12 +32,17 @@ impl Plugin for InteractPlugin {
                 (
                     update_interaction_status.before(emit_events),
                     emit_events.after(leafwing_input_manager::plugin::InputManagerSystem::Update),
-                ),
+                )
+                    .in_set(InteractSet),
             )
             .add_systems(Update, draw_interaction_nodes)
             .add_systems(Update, event_logger);
     }
 }
+
+/// The systems in PreUpdate emitting the events.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct InteractSet;
 
 /// A circle collider in the world that can be interacted with.
 ///

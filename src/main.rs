@@ -2,6 +2,7 @@ use bevy::{log::LogPlugin, prelude::*};
 
 mod camera;
 mod debug;
+mod driving;
 mod input;
 mod interact;
 mod railroad;
@@ -50,5 +51,6 @@ fn main() {
         .add_plugins(ui::UIOverlayPlugin)
         .add_plugins(input::InputPlugin)
         .add_plugins(interact::InteractPlugin)
+        .add_plugins(driving::ManualDrivingPlugin)
         .run();
 }

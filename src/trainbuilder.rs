@@ -2,7 +2,7 @@ use bevy::{ecs::system::SystemId, prelude::*};
 use petgraph::EdgeDirection;
 
 use crate::{
-    interact::{InteractionNode, InteractionStatus, NodeClickEvent, TileClickEvent},
+    interact::{InteractionNode, InteractionStatus, TileClickEvent},
     railroad::RailGraph,
     sprites::{SpriteAtlases, VehicleSprite},
     tilemap::*,
@@ -14,14 +14,14 @@ pub struct TrainBuildingPlugin;
 
 impl Plugin for TrainBuildingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (train_builder, uncoupling_system));
         let label = app.world.register_system(reindex_system_command);
-        app.insert_resource(ReindexSystemLabel(label));
+        app.add_systems(Update, (train_builder, uncoupling_system))
+            .insert_resource(ReindexSystemLabel(label));
     }
 }
 
 #[derive(Resource)]
-struct ReindexSystemLabel(SystemId<(Vec<Entity>, Entity, u16)>);
+struct ReindexSystemLabel(SystemId<(Vec<Entity>, Entity, u16, u16)>);
 
 impl Trail {
     /// Returns the index of the wagon currently nearest to `face` or `length` if at the end.
@@ -110,36 +110,19 @@ fn train_builder(
 fn uncoupling_system(
     mut commands: Commands,
     reindex_command: Res<ReindexSystemLabel>,
-    mut trigger: EventReader<NodeClickEvent>,
-    bumpers: Query<(&Parent, &BumperNode)>,
-    vehicles: Query<(Entity, &TrainIndex, &Parent)>,
+    mut trigger: EventReader<TrainClickEvent>,
+    vehicles: Query<(Entity, &TrainIndex)>,
     trains: Query<(Entity, &Trail, &Children)>,
 ) {
     for ev in trigger.read() {
-        if !ev.primary {
-            // only uncouple from one side, action should be symmetric.
-            continue;
-        }
-        let Ok((bump_parent, bump_dir)) = bumpers.get(ev.node) else {
-            continue;
-        };
-        let Ok((_, index, vehicle_parent)) = vehicles.get(bump_parent.get()) else {
-            error!("BumperNode should always be attached to a vehicle!");
-            continue;
-        };
-        let Ok((train, trail, train_children)) = trains.get(vehicle_parent.get()) else {
+        let Ok((train, trail, train_children)) = trains.get(ev.train) else {
+            warn!("Train click event for not-query-matching entity (despawned or malformed)");
             error!("Vehicles should always be attached to a train!");
             continue;
         };
 
-        // The "fence-post" index of where the uncouple should happen.
-        // I.e. between wagons with index `breaking_point` and `breaking_point+1`.
-        let breaking_point = match bump_dir {
-            BumperNode::Front => index.position,
-            BumperNode::Back => index.position + 1,
-        };
-        let front_length = breaking_point;
-        let back_length = trail.length - breaking_point;
+        let front_length = ev.bumper_index;
+        let back_length = trail.length - ev.bumper_index;
 
         if front_length == 0 || back_length == 0 {
             // Already at an end of the train
@@ -159,8 +142,8 @@ fn uncoupling_system(
         let to_reparent = train_children
             .iter()
             .filter_map(|&e| vehicles.get(e).ok())
-            .filter(|(_, idx, _)| idx.position >= breaking_point)
-            .map(|(e, _, _)| e)
+            .filter(|(_, idx)| idx.position >= ev.bumper_index)
+            .map(|(e, _)| e)
             .collect::<Vec<_>>();
 
         let reindex_command = reindex_command.0.clone();
@@ -176,9 +159,10 @@ fn uncoupling_system(
             ))
             .push_children(&to_reparent);
         commands.add(move |world: &mut World| {
-            if let Err(e) =
-                world.run_system_with_input(reindex_command, (to_reparent, train, breaking_point))
-            {
+            if let Err(e) = world.run_system_with_input(
+                reindex_command,
+                (to_reparent, train, front_length, back_length),
+            ) {
                 error!("couldn't run reindex_system_command: {e:?}");
             }
         })
@@ -187,20 +171,23 @@ fn uncoupling_system(
 
 /// The mutating part of the `uncoupling_system`, since I want to apply them
 /// at a controlled time.
+///
+/// The front trail has to be shortened by back_length,
+/// while the vehicles in to_reindex have to have front_length subtracted.
 fn reindex_system_command(
-    In((to_reindex, to_shorten, num_removed)): In<(Vec<Entity>, Entity, u16)>,
+    In((to_reindex, to_shorten, front_len, back_len)): In<(Vec<Entity>, Entity, u16, u16)>,
     mut train: Query<&mut Trail>,
     mut vehicles: Query<&mut TrainIndex>,
 ) {
     let Ok(mut t) = train.get_mut(to_shorten) else {
         return;
     };
-    t.length -= num_removed;
+    t.length -= back_len;
 
     // Somehow doesn't allow a for loop
     let mut iter = vehicles.iter_many_mut(&to_reindex);
     while let Some(mut idx) = iter.fetch_next() {
-        idx.position -= num_removed;
+        idx.position -= front_len;
     }
 }
 
