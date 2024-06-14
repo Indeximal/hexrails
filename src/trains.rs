@@ -3,7 +3,6 @@ use std::{f32::consts::PI, ops::Add};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::interact::{InteractSet, NodeClickEvent};
 use crate::tilemap::Joint;
 
 /// The length in meters that a single track covers.
@@ -15,30 +14,22 @@ pub struct TrainPlugin;
 impl Plugin for TrainPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Time::<Fixed>::from_seconds(1. / 64.))
-            .add_event::<TrainClickEvent>()
             .add_systems(
                 FixedUpdate,
                 (tick_velocity.before(tick_trains), tick_trains),
             )
-            .add_systems(PreUpdate, emit_train_events.after(InteractSet))
             .add_systems(PostUpdate, position_train_units);
     }
 }
 
-#[derive(Event)]
-pub struct TrainClickEvent {
-    /// The id of the [`TrainBundle`] entity.
-    pub train: Entity,
-
-    /// The "fence-post" index of where the train was clicked.
-    ///
-    /// I.e. between wagons with index `bumper_index` and `bumper_index+1`.
-    pub bumper_index: u16,
-}
+// ================================ TRAINS ===================================
 
 /// The components of an entity that make up a logical train.
 ///
-/// Wagons and locomotives are children of this entity with components of [`VehicleBundle`].
+/// ## Additional components:
+/// - Wagons and locomotives are [`Children`] of this entity with components of [`VehicleBundle`].
+/// - At most one train has a [`PlayerControlledTrain`] attached, meaning it is the one
+///   currently controlled by the player.
 #[derive(Bundle)]
 pub struct TrainBundle {
     pub path: Trail,
@@ -47,22 +38,8 @@ pub struct TrainBundle {
 
     /// Currently always "Train" for inspection
     pub name: Name,
-    /// Always default, used for hierarchy
+    /// Always default, used for hierarchy only
     pub spatial: SpatialBundle,
-}
-
-/// A single vehicle, child to a [`TrainBundle`] entity.
-///
-/// Also has colliders as children.
-#[derive(Bundle)]
-pub struct VehicleBundle {
-    pub index: TrainIndex,
-    pub tyype: VehicleType,
-    pub stats: VehicleStats,
-    pub name: Name,
-
-    /// The visuals, including transform and visibility.
-    pub visuals: SpriteSheetBundle,
 }
 
 #[derive(Component, Serialize, Deserialize)]
@@ -74,6 +51,47 @@ pub struct Trail {
     pub path_progress: f32,
     /// Amount of wagons and locomotives. Must be equal to the number of [`TrainIndex`] children.
     pub length: u16,
+}
+
+#[derive(Component, Reflect, Serialize, Deserialize)]
+pub struct Velocity {
+    /// Current velocity in m/s. Should be non-negative
+    pub velocity: f32,
+    /// `velocity` will be clamped to this value.
+    /// TODO: move into stats
+    pub max_velocity: f32,
+    // Stats that affect the moving object are given by the sum of all vehicles.
+}
+
+#[derive(Component, Default)]
+pub struct Controller {
+    /// The fraction of the power being applied. Must be in the interval [0, 1].
+    pub throttle: f32,
+    /// The fraction of the brake being applied. Must be in the interval [0, 1].
+    pub brake: f32,
+}
+
+#[derive(Component)]
+pub struct PlayerControlledTrain;
+
+// ================================ VEHICLES ===================================
+
+/// A single vehicle, child to a [`TrainBundle`] entity.
+///
+/// ## Other components:
+/// - Also has bumpers as children, with [`BumperNode`] and interaction colliders.
+/// - Rapier collision stuff, i.e. a Cuboid collider and some flags.
+#[derive(Bundle)]
+pub struct VehicleBundle {
+    pub index: TrainIndex,
+    pub tyype: VehicleType,
+    pub stats: VehicleStats,
+    pub name: Name,
+
+    /// The visuals, including transform and visibility.
+    ///
+    /// The transform gets set every frame to match the train position.
+    pub visuals: SpriteSheetBundle,
 }
 
 #[derive(Component, Serialize, Deserialize)]
@@ -101,6 +119,8 @@ pub struct TrainIndex {
     pub position: u16,
 }
 
+// ============================= Vehicle parts ================================
+
 /// The component attached to the collider children of vehicles.
 #[derive(Component)]
 pub enum BumperNode {
@@ -108,26 +128,7 @@ pub enum BumperNode {
     Back,
 }
 
-#[derive(Component, Reflect, Serialize, Deserialize)]
-pub struct Velocity {
-    /// Current velocity in m/s. Should be non-negative
-    pub velocity: f32,
-    /// `velocity` will be clamped to this value.
-    /// TODO: move into stats
-    pub max_velocity: f32,
-    // Stats that affect the moving object are given by the sum of all vehicles.
-}
-
-#[derive(Component, Default)]
-pub struct Controller {
-    /// The fraction of the power being applied. Must be in the interval [0, 1].
-    pub throttle: f32,
-    /// The fraction of the brake being applied. Must be in the interval [0, 1].
-    pub brake: f32,
-}
-
-#[derive(Component)]
-pub struct PlayerControlledTrain;
+// =================================== impls ==================================
 
 impl VehicleStats {
     pub fn default_for_type(wagon_type: VehicleType) -> Self {
@@ -198,6 +199,8 @@ impl TrainBundle {
     }
 }
 
+// ================================ SYSTEMS ===================================
+
 /// System to apply throttle/brake to the velocity
 fn tick_velocity(
     time: Res<Time<Fixed>>,
@@ -254,6 +257,8 @@ fn position_train_units(
     }
 }
 
+// ================================ FUNCTIONS ===================================
+
 /// Helper to change the `output` Transform to intrapolate the start and end position and rotation
 fn move_train_unit(output: &mut Transform, start: Joint, end: Joint, t: f32) {
     // todo: actually move in an arc and not linear
@@ -268,58 +273,4 @@ fn move_train_unit(output: &mut Transform, start: Joint, end: Joint, t: f32) {
     let angle = start_angle + angle_diff * t;
     output.translation = pos.extend(output.translation.z);
     output.rotation = Quat::from_rotation_z(angle);
-}
-
-fn emit_train_events(
-    mut trigger: EventReader<NodeClickEvent>,
-    mut writer: EventWriter<TrainClickEvent>,
-    bumpers: Query<(&Parent, &BumperNode)>,
-    vehicles: Query<(&TrainIndex, &Parent)>,
-    trains: Query<(Entity, &Trail, &Children)>,
-) {
-    for ev in trigger.read() {
-        if !ev.primary {
-            // only trigger from one side, action should be symmetric.
-            continue;
-        }
-        let Ok((bump_parent, bump_dir)) = bumpers.get(ev.node) else {
-            continue;
-        };
-        let Ok((index, vehicle_parent)) = vehicles.get(bump_parent.get()) else {
-            error!("BumperNode should always be attached to a vehicle!");
-            continue;
-        };
-        let Ok((train, _trail, _train_children)) = trains.get(vehicle_parent.get()) else {
-            error!("Vehicles should always be attached to a train!");
-            continue;
-        };
-
-        let bumper_index = match bump_dir {
-            BumperNode::Front => index.position,
-            BumperNode::Back => index.position + 1,
-        };
-
-        // Debug some invariants:
-        #[cfg(test)]
-        {
-            if !_trail.check_invariant() {
-                error!("Trail invariant broken on {train:?}!");
-            }
-            if index.position >= _trail.length {
-                error!(
-                    "Found vehicle {:?} with index greater than train {train:?}'s length!",
-                    bump_parent.get()
-                );
-            }
-            if _train_children.len() != _trail.length as usize {
-                error!("Train {train:?}'s length in trail does not match number of children!");
-            }
-        }
-
-        debug!("Train {train:?} clicked at {bumper_index}");
-        writer.send(TrainClickEvent {
-            train,
-            bumper_index,
-        });
-    }
 }

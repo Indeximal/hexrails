@@ -3,7 +3,7 @@ use bevy_rapier2d::prelude::{ActiveCollisionTypes, ActiveEvents, Collider, Senso
 use petgraph::EdgeDirection;
 
 use crate::{
-    interact::{InteractionNode, InteractionStatus, TileClickEvent},
+    interact::{InteractionNode, InteractionStatus, TileClickEvent, TrainClickEvent},
     railroad::RailGraph,
     sprites::{SpriteAtlases, VehicleSprite},
     tilemap::*,

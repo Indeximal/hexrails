@@ -11,6 +11,8 @@
 //! Everything is updated in `PreUpdate`, if you need to run anything dependent,
 //! use `.after()` with [`InteractSet`].
 //!
+//! [`TrainClickEvent`] are generated in addition to the other two events.
+//!
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -19,12 +21,14 @@ use bevy_inspector_egui::bevy_egui::EguiContext;
 use crate::camera::WorldViewCam;
 use crate::input::Action;
 use crate::tilemap::{Direction, Joint, Tile};
+use crate::trains::{BumperNode, Trail, TrainIndex};
 
 pub struct InteractPlugin;
 impl Plugin for InteractPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<TileClickEvent>()
             .add_event::<NodeClickEvent>()
+            .add_event::<TrainClickEvent>()
             // Ordering the event to be after the input, but still in PreUpdate,
             // so in Update the events are available
             .add_systems(
@@ -32,6 +36,7 @@ impl Plugin for InteractPlugin {
                 (
                     update_interaction_status.before(emit_events),
                     emit_events.after(leafwing_input_manager::plugin::InputManagerSystem::Update),
+                    emit_train_events.after(emit_events),
                 )
                     .in_set(InteractSet),
             )
@@ -86,6 +91,20 @@ pub struct NodeClickEvent {
     /// If this is false, this was just another node that was also below the cursor,
     /// but deemed secondary.
     pub primary: bool,
+}
+
+/// Generated whenever a bumper of a train was clicked.
+///
+/// This is generated in addition to the [`NodeClickEvent`] and only for the primary one.
+#[derive(Event)]
+pub struct TrainClickEvent {
+    /// The id of the [`TrainBundle`] entity.
+    pub train: Entity,
+
+    /// The "fence-post" index of where the train was clicked.
+    ///
+    /// I.e. between wagons with index `bumper_index` and `bumper_index+1`.
+    pub bumper_index: u16,
 }
 
 /// System for generating the interaction events..
@@ -194,6 +213,60 @@ fn update_interaction_status(
             .expect("id was assigned by the same query");
 
         *status = InteractionStatus::NearestHit;
+    }
+}
+
+fn emit_train_events(
+    mut trigger: EventReader<NodeClickEvent>,
+    mut writer: EventWriter<TrainClickEvent>,
+    bumpers: Query<(&Parent, &BumperNode)>,
+    vehicles: Query<(&TrainIndex, &Parent)>,
+    trains: Query<(Entity, &Trail, &Children)>,
+) {
+    for ev in trigger.read() {
+        if !ev.primary {
+            // only trigger from one side, action should be symmetric.
+            continue;
+        }
+        let Ok((bump_parent, bump_dir)) = bumpers.get(ev.node) else {
+            continue;
+        };
+        let Ok((index, vehicle_parent)) = vehicles.get(bump_parent.get()) else {
+            error!("BumperNode should always be attached to a vehicle!");
+            continue;
+        };
+        let Ok((train, _trail, _train_children)) = trains.get(vehicle_parent.get()) else {
+            error!("Vehicles should always be attached to a train!");
+            continue;
+        };
+
+        let bumper_index = match bump_dir {
+            BumperNode::Front => index.position,
+            BumperNode::Back => index.position + 1,
+        };
+
+        // Debug some invariants:
+        #[cfg(test)]
+        {
+            if !_trail.check_invariant() {
+                error!("Trail invariant broken on {train:?}!");
+            }
+            if index.position >= _trail.length {
+                error!(
+                    "Found vehicle {:?} with index greater than train {train:?}'s length!",
+                    bump_parent.get()
+                );
+            }
+            if _train_children.len() != _trail.length as usize {
+                error!("Train {train:?}'s length in trail does not match number of children!");
+            }
+        }
+
+        debug!("Train {train:?} clicked at {bumper_index}");
+        writer.send(TrainClickEvent {
+            train,
+            bumper_index,
+        });
     }
 }
 
