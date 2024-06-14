@@ -191,6 +191,7 @@ fn load_game(world: &mut World, savegame: SaveGame) {
                 controller: Default::default(),
                 name: Name::new("Train"),
                 spatial: Default::default(),
+                marker: TrainMarker,
             })
             .push_children(&wagons);
     }

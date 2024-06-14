@@ -59,7 +59,7 @@ fn draw_train_paths(trains: Query<(&Trail, Option<&PlayerControlledTrain>)>, mut
 
 fn log_collisions(mut collision_events: EventReader<bevy_rapier2d::prelude::CollisionEvent>) {
     for collision_event in collision_events.read() {
-        trace!("collision: {collision_event:?}");
+        trace!("CollisionEvent::{collision_event:?}");
     }
 }
 
@@ -68,10 +68,10 @@ fn log_interaction_events(
     mut n_evs: EventReader<NodeClickEvent>,
 ) {
     for ev in t_evs.read() {
-        trace!("TileClickEvent received: {:?}", ev.coord);
+        trace!("{ev:?}");
     }
 
     for ev in n_evs.read() {
-        trace!("NodeClickEvent received: {ev:?}");
+        trace!("{ev:?}");
     }
 }

@@ -18,7 +18,7 @@ impl Plugin for TrainPlugin {
                 FixedUpdate,
                 (tick_velocity.before(tick_trains), tick_trains),
             )
-            .add_systems(PostUpdate, position_train_units);
+            .add_systems(PostUpdate, (position_train_units, update_tint));
     }
 }
 
@@ -32,6 +32,7 @@ impl Plugin for TrainPlugin {
 ///   currently controlled by the player.
 #[derive(Bundle)]
 pub struct TrainBundle {
+    pub marker: TrainMarker,
     pub path: Trail,
     pub velocity: Velocity,
     pub controller: Controller,
@@ -41,6 +42,9 @@ pub struct TrainBundle {
     /// Always default, used for hierarchy only
     pub spatial: SpatialBundle,
 }
+
+#[derive(Component)]
+pub struct TrainMarker;
 
 #[derive(Component, Serialize, Deserialize)]
 pub struct Trail {
@@ -73,6 +77,9 @@ pub struct Controller {
 
 #[derive(Component)]
 pub struct PlayerControlledTrain;
+
+#[derive(Component)]
+pub struct Crashed;
 
 // ================================ VEHICLES ===================================
 
@@ -187,6 +194,7 @@ impl Trail {
 impl TrainBundle {
     pub fn new(trail: Trail, max_velocity: f32) -> Self {
         Self {
+            marker: TrainMarker,
             path: trail,
             velocity: Velocity {
                 velocity: 0.0,
@@ -204,13 +212,16 @@ impl TrainBundle {
 /// System to apply throttle/brake to the velocity
 fn tick_velocity(
     time: Res<Time<Fixed>>,
-    mut train: Query<(&Controller, &mut Velocity, &Children)>,
-    stats: Query<&VehicleStats>,
+    mut train: Query<
+        (&Controller, &mut Velocity, &Children),
+        (With<TrainMarker>, Without<Crashed>),
+    >,
+    vehicles: Query<&VehicleStats>,
 ) {
     for (controller, mut velocity, children) in train.iter_mut() {
         let total_stats = children
             .iter()
-            .filter_map(|&id| stats.get(id).ok())
+            .filter_map(|&id| vehicles.get(id).ok())
             .fold(VehicleStats::additive_identiy(), VehicleStats::add);
 
         // Model constant brake force
@@ -226,7 +237,10 @@ fn tick_velocity(
 }
 
 /// Fixed timestep system to update the progress of the trains
-fn tick_trains(time: Res<Time<Fixed>>, mut trains: Query<(&mut Trail, &Velocity)>) {
+fn tick_trains(
+    time: Res<Time<Fixed>>,
+    mut trains: Query<(&mut Trail, &Velocity), With<TrainMarker>>,
+) {
     for (mut train, velocity) in trains.iter_mut() {
         train.path_progress += velocity.velocity * time.delta_seconds() / METER_PER_TRACK;
         // TODO: crash
@@ -237,10 +251,10 @@ fn tick_trains(time: Res<Time<Fixed>>, mut trains: Query<(&mut Trail, &Velocity)
 /// System to update the transform of the train wagons.
 /// Precondition: progress <= path.len() - 1
 fn position_train_units(
-    mut train_wagons: Query<(&Parent, &mut Transform, &TrainIndex)>,
-    trains: Query<&Trail>,
+    mut vehicles: Query<(&Parent, &mut Transform, &TrainIndex)>,
+    trains: Query<&Trail, With<TrainMarker>>,
 ) {
-    for (parent, mut transform, unit) in train_wagons.iter_mut() {
+    for (parent, mut transform, unit) in vehicles.iter_mut() {
         let head = trains
             .get(parent.get())
             .expect("Train Unit did not have a Train Head as a Parent");
@@ -254,6 +268,24 @@ fn position_train_units(
         let start = head.path[render_progress.floor() as usize];
         let end = head.path[render_progress.floor() as usize + 1];
         move_train_unit(transform.as_mut(), start, end, render_progress.fract())
+    }
+}
+
+fn update_tint(
+    trains: Query<(&Children, Option<&Crashed>), With<TrainMarker>>,
+    mut vehicles: Query<&mut Sprite>,
+) {
+    for (children, has_crashed) in &trains {
+        let color = if has_crashed.is_none() {
+            Color::WHITE
+        } else {
+            Color::GRAY
+        };
+        for &child in children.iter() {
+            if let Ok(mut sprite) = vehicles.get_mut(child) {
+                sprite.color = color;
+            }
+        }
     }
 }
 

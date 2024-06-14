@@ -2,6 +2,7 @@ use bevy::{log::LogPlugin, prelude::*};
 use bevy_rapier2d::plugin::{NoUserData, RapierPhysicsPlugin};
 
 mod camera;
+mod collisions;
 mod debug;
 mod driving;
 mod input;
@@ -36,7 +37,7 @@ fn main() {
                 })
                 .set(LogPlugin {
                     level: bevy::log::Level::DEBUG,
-                    filter: "info,wgpu=error,naga=warn,hexrails=debug,hexrails::debug=trace".into(),
+                    filter: "info,wgpu=error,naga=warn,hexrails=debug,hexrails::debug=debug".into(),
                     ..Default::default()
                 }),
         )
@@ -54,5 +55,6 @@ fn main() {
         .add_plugins(input::InputPlugin)
         .add_plugins(interact::InteractPlugin)
         .add_plugins(driving::ManualDrivingPlugin)
+        .add_plugins(collisions::CollisionPlugin)
         .run();
 }

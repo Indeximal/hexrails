@@ -27,6 +27,7 @@ impl Plugin for ManualDrivingPlugin {
         );
     }
 }
+
 /// System to extend the path of trains if necessary. Useful mosty for manual driving.
 fn auto_extend_train_path(
     mut trains: Query<(&mut Trail, Option<&PlayerControlledTrain>)>,
