@@ -1,4 +1,5 @@
 use bevy::{log::LogPlugin, prelude::*};
+use bevy_rapier2d::plugin::{NoUserData, RapierPhysicsPlugin};
 
 mod camera;
 mod debug;
@@ -35,10 +36,11 @@ fn main() {
                 })
                 .set(LogPlugin {
                     level: bevy::log::Level::DEBUG,
-                    filter: "info,wgpu=error,naga=warn,hexrails=debug".into(),
+                    filter: "info,wgpu=error,naga=warn,hexrails=debug,hexrails::debug=trace".into(),
                     ..Default::default()
                 }),
         )
+        .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0))
         .add_plugins(sprites::AssetPlugin)
         .add_plugins(camera::MovingCameraPlugin)
         .add_plugins(debug::DebugPlugin)

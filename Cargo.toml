@@ -13,6 +13,7 @@ bevy_pancam = { version = "0.11.0", features = ["bevy_egui"] }
 leafwing-input-manager = "0.13"
 petgraph = { version = "0.6.4", features = ["serde-1"] }
 rand = "0.8.5"
+bevy_rapier2d = "0.26.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 

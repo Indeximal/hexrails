@@ -1,4 +1,5 @@
 use bevy::{ecs::system::SystemId, prelude::*};
+use bevy_rapier2d::prelude::{ActiveCollisionTypes, ActiveEvents, Collider, Sensor};
 use petgraph::EdgeDirection;
 
 use crate::{
@@ -306,6 +307,13 @@ pub fn spawn_wagon(
             name: Name::new("Wagon"),
             visuals: sprite,
         })
+        .insert(Collider::cuboid(
+            0.9 * TILE_WIDTH / 2.,
+            0.5 * TILE_WIDTH / 2.,
+        ))
+        .insert(Sensor)
+        .insert(ActiveEvents::COLLISION_EVENTS)
+        .insert(ActiveCollisionTypes::STATIC_STATIC)
         .add_child(front_bumper)
         .add_child(back_bumper)
         .id()
