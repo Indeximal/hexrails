@@ -7,8 +7,8 @@ pub struct CollisionPlugin;
 
 impl Plugin for CollisionPlugin {
     fn build(&self, app: &mut App) {
-        // Fixme: figure out ordering... Maybe Post?
-        app.add_systems(Update, crash_on_collision);
+        // PostUpdate so that velocity shouldn't be overwritten after being zeroed.
+        app.add_systems(PostUpdate, crash_on_collision);
     }
 }
 

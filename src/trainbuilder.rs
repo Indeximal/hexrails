@@ -1,5 +1,7 @@
 use bevy::{ecs::system::SystemId, prelude::*};
-use bevy_rapier2d::prelude::{ActiveCollisionTypes, ActiveEvents, Collider, Sensor};
+use bevy_rapier2d::prelude::{
+    ActiveCollisionTypes, ActiveEvents, Collider, CollisionEvent, CollisionGroups, Group, Sensor,
+};
 use petgraph::EdgeDirection;
 
 use crate::{
@@ -18,7 +20,12 @@ impl Plugin for TrainBuildingPlugin {
         let label = app.world.register_system(reindex_system_command);
         app.add_systems(
             Update,
-            (train_builder, uncoupling_system, append_vehicle_system),
+            (
+                train_builder,
+                uncoupling_system,
+                append_vehicle_system,
+                apply_coupleable_component,
+            ),
         )
         .insert_resource(ReindexSystemLabel(label));
     }
@@ -26,6 +33,13 @@ impl Plugin for TrainBuildingPlugin {
 
 #[derive(Resource)]
 struct ReindexSystemLabel(SystemId<(Vec<Entity>, Entity, u16, u16)>);
+
+/// Attached to a train whenever it bumps into another one, given by the inner id.
+#[derive(Component)]
+pub struct CoupleableTo(Entity);
+
+const VEHICLE_GROUP: Group = Group::GROUP_1;
+const BUMPER_GROUP: Group = Group::GROUP_2;
 
 impl Trail {
     /// Returns the index of the wagon currently nearest to `face` or `length` if at the end.
@@ -146,6 +160,68 @@ fn append_vehicle_system(
     }
 }
 
+// Fixme: reversing can fuck this up I think
+fn apply_coupleable_component(
+    mut commands: Commands,
+    mut evs: EventReader<CollisionEvent>,
+    bumpers: Query<&Parent, With<BumperNode>>,
+    vehicles: Query<&Parent, With<VehicleType>>,
+) {
+    for collision_event in evs.read() {
+        let (a, b, started) = match collision_event {
+            CollisionEvent::Started(a, b, _) => (a, b, true),
+            CollisionEvent::Stopped(a, b, _) => (a, b, false),
+        };
+        let (Ok(v1), Ok(v2)) = (bumpers.get(*a), bumpers.get(*b)) else {
+            // Wasn't two bumpers
+            continue;
+        };
+        let (Ok(t1), Ok(t2)) = (vehicles.get(v1.get()), vehicles.get(v2.get())) else {
+            error!("BumperNode should always be attached to a vehicle!");
+            continue;
+        };
+        let (t1, t2) = (t1.get(), t2.get());
+
+        if t1 == t2 {
+            continue;
+        }
+
+        if started {
+            debug!("Trains {t1:?} and {t2:?} are now coupleable");
+        } else {
+            debug!("Trains {t1:?} and {t2:?} are not coupleable anymore");
+        }
+
+        if let Some(mut cmd) = commands.get_entity(t1) {
+            if started {
+                cmd.insert(CoupleableTo(t2));
+            } else {
+                cmd.remove::<CoupleableTo>();
+            }
+        }
+        if let Some(mut cmd) = commands.get_entity(t2) {
+            if started {
+                cmd.insert(CoupleableTo(t1));
+            } else {
+                cmd.remove::<CoupleableTo>();
+            }
+        }
+    }
+}
+
+fn coupling_system(
+    mut trigger: EventReader<TrainClickEvent>,
+    trains: Query<(&CoupleableTo, &Trail), With<TrainMarker>>,
+) {
+    for ev in trigger.read() {
+        let Ok((coupleable, trail)) = trains.get(ev.train) else {
+            // is not couplable probably
+            continue;
+        };
+        // TODO: was the correct side pressed?
+    }
+}
+
 fn uncoupling_system(
     mut commands: Commands,
     reindex_command: Res<ReindexSystemLabel>,
@@ -156,7 +232,6 @@ fn uncoupling_system(
     for ev in trigger.read() {
         let Ok((train, trail, train_children)) = trains.get(ev.train) else {
             warn!("Train click event for not-query-matching entity (despawned or malformed)");
-            error!("Vehicles should always be attached to a train!");
             continue;
         };
 
@@ -292,6 +367,11 @@ pub fn spawn_wagon(
             })
             .insert(InteractionStatus::default())
             .insert(uncouple_dir)
+            .insert(Collider::ball(TILE_WIDTH / 16.))
+            .insert(Sensor)
+            .insert(ActiveEvents::COLLISION_EVENTS)
+            .insert(ActiveCollisionTypes::STATIC_STATIC)
+            .insert(CollisionGroups::new(BUMPER_GROUP, BUMPER_GROUP))
             .id()
     }
     let front_bumper = spawn_bumper(commands, -TILE_WIDTH / 2., BumperNode::Front);
@@ -314,6 +394,7 @@ pub fn spawn_wagon(
         .insert(Sensor)
         .insert(ActiveEvents::COLLISION_EVENTS)
         .insert(ActiveCollisionTypes::STATIC_STATIC)
+        .insert(CollisionGroups::new(VEHICLE_GROUP, VEHICLE_GROUP))
         .add_child(front_bumper)
         .add_child(back_bumper)
         .id()
