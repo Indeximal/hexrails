@@ -58,3 +58,81 @@ fn main() {
         .add_plugins(collisions::CollisionPlugin)
         .run();
 }
+
+#[macro_export]
+macro_rules! ok_or_tt {
+    ($ttt: tt, $x:expr, $err:literal) => {{
+        match $x {
+            Ok(x) => x,
+            Err(e) => {
+                error!(concat!($err, ": {err:?}"), err = e);
+                $ttt;
+            }
+        }
+    }};
+    ($ttt: tt, $x:expr, $err:literal) => {{
+        let Ok(x) = $x else {
+            $ttt;
+        };
+        x
+    }};
+}
+
+#[macro_export]
+macro_rules! some_or_tt {
+    ($ttt: tt, $x:expr, $err:literal) => {{
+        match $x {
+            Some(x) => x,
+            None => {
+                error!($err);
+                $ttt;
+            }
+        }
+    }};
+    ($ttt: tt, $x:expr) => {{
+        let Some(x) = $x else {
+            $ttt;
+        };
+        x
+    }};
+}
+
+#[macro_export]
+macro_rules! ok_or_return {
+    ($x:expr, $err:literal) => {
+        crate::ok_or_tt!(return, $x, $err)
+    };
+    ($x:expr) => {
+        crate::ok_or_tt!(return, $x)
+    };
+}
+
+#[macro_export]
+macro_rules! some_or_return {
+    ($x:expr, $err:literal) => {
+        crate::some_or_tt!(return, $x, $err)
+    };
+    ($x:expr) => {
+        crate::some_or_tt!(return, $x)
+    };
+}
+
+#[macro_export]
+macro_rules! ok_or_continue {
+    ($x:expr, $err:literal) => {
+        crate::ok_or_tt!(continue, $x, $err)
+    };
+    ($x:expr) => {
+        crate::ok_or_tt!(continue, $x)
+    };
+}
+
+#[macro_export]
+macro_rules! some_or_continue {
+    ($x:expr, $err:literal) => {
+        crate::some_or_tt!(continue, $x, $err)
+    };
+    ($x:expr) => {
+        crate::some_or_tt!(continue, $x)
+    };
+}

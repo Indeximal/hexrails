@@ -129,7 +129,7 @@ pub struct TrainIndex {
 // ============================= Vehicle parts ================================
 
 /// The component attached to the collider children of vehicles.
-#[derive(Component)]
+#[derive(Component, Debug, Clone, Copy)]
 pub enum BumperNode {
     Front,
     Back,
@@ -175,6 +175,28 @@ impl Add<&VehicleStats> for VehicleStats {
 }
 
 impl Trail {
+    /// Returns the point on the trail for a given fractional index
+    /// as a pair of start, end joint plus an interpolation value.
+    ///
+    /// `index = 0` corresponds to the front bumper of the train,
+    /// `index = length` to the back bumper.
+    /// Interpolation value 0 means the first joint in the tuple, 1 the second.
+    /// The first joint is always the one towards the back of the trail.
+    ///
+    /// Returns `None` if the index does not have joints anymore in this trail.
+    /// This can be outside of the active segment of this trail.
+    /// Should never return `None` if the trail is upholds invariants and
+    /// `index` is in range [0, length).
+    pub fn point_on_trail(&self, index: f32) -> Result<(Joint, Joint, f32), ()> {
+        if !self.check_invariant() {
+            return Err(());
+        }
+        let progress = self.path_progress - index;
+        let &start = self.path.get(progress.floor() as usize).ok_or(())?;
+        let &end = self.path.get(progress.floor() as usize + 1).ok_or(())?;
+        Ok((start, end, progress.fract()))
+    }
+
     /// Shortens the path to not contain any extra tiles in front
     pub fn trim_front(&mut self) {
         while self.path.len() as f32 > self.path_progress + 2.0 {
@@ -255,19 +277,15 @@ fn position_train_units(
     trains: Query<&Trail, With<TrainMarker>>,
 ) {
     for (parent, mut transform, unit) in vehicles.iter_mut() {
-        let head = trains
-            .get(parent.get())
-            .expect("Train Unit did not have a Train Head as a Parent");
-
-        let progress = head.path_progress - unit.position as f32;
-        if progress < 1. {
-            error!("Train Unit is not on path!");
+        let Ok(trail) = trains.get(parent.get()) else {
+            error!("Vehilce did not have a Train as a Parent");
             continue;
-        }
-        let render_progress = progress - 0.5;
-        let start = head.path[render_progress.floor() as usize];
-        let end = head.path[render_progress.floor() as usize + 1];
-        move_train_unit(transform.as_mut(), start, end, render_progress.fract())
+        };
+        let Ok((start, end, interp)) = trail.point_on_trail(unit.position as f32 + 0.5) else {
+            error!("Vehicle not on trail!");
+            continue;
+        };
+        move_train_unit(transform.as_mut(), start, end, interp);
     }
 }
 

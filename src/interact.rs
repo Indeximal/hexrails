@@ -105,6 +105,9 @@ pub struct TrainClickEvent {
     ///
     /// I.e. between wagons with index `bumper_index` and `bumper_index+1`.
     pub bumper_index: u16,
+
+    /// The bumper entity that was clicked.
+    pub bumper_entity: Entity,
 }
 
 /// System for generating the interaction events..
@@ -266,6 +269,7 @@ fn emit_train_events(
         writer.send(TrainClickEvent {
             train,
             bumper_index,
+            bumper_entity: ev.node,
         });
     }
 }

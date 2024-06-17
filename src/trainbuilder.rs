@@ -1,11 +1,13 @@
-use bevy::{ecs::system::SystemId, prelude::*};
-use bevy_rapier2d::prelude::{
-    ActiveCollisionTypes, ActiveEvents, Collider, CollisionEvent, CollisionGroups, Group, Sensor,
+use bevy::{ecs::system::RunSystemOnce, prelude::*};
+use bevy_rapier2d::{
+    plugin::RapierContext,
+    prelude::{ActiveCollisionTypes, ActiveEvents, Collider, CollisionGroups, Group, Sensor},
 };
 use petgraph::EdgeDirection;
 
 use crate::{
     interact::{InteractionNode, InteractionStatus, TileClickEvent, TrainClickEvent},
+    ok_or_return,
     railroad::RailGraph,
     sprites::{SpriteAtlases, VehicleSprite},
     tilemap::*,
@@ -17,26 +19,17 @@ pub struct TrainBuildingPlugin;
 
 impl Plugin for TrainBuildingPlugin {
     fn build(&self, app: &mut App) {
-        let label = app.world.register_system(reindex_system_command);
         app.add_systems(
             Update,
             (
                 train_builder,
-                uncoupling_system,
                 append_vehicle_system,
-                apply_coupleable_component,
+                uncoupling_system,
+                coupling_system,
             ),
-        )
-        .insert_resource(ReindexSystemLabel(label));
+        );
     }
 }
-
-#[derive(Resource)]
-struct ReindexSystemLabel(SystemId<(Vec<Entity>, Entity, u16, u16)>);
-
-/// Attached to a train whenever it bumps into another one, given by the inner id.
-#[derive(Component)]
-pub struct CoupleableTo(Entity);
 
 const VEHICLE_GROUP: Group = Group::GROUP_1;
 const BUMPER_GROUP: Group = Group::GROUP_2;
@@ -47,7 +40,7 @@ impl Trail {
     ///
     /// Currently unused, but maybe useful in the future...
     #[allow(dead_code)]
-    pub fn index_for_tile(&self, face: Joint) -> Option<u16> {
+    fn index_for_tile(&self, face: Joint) -> Option<u16> {
         if self.path_progress - self.length as f32 <= 1. {
             // no space for a new wagon
             return None;
@@ -60,6 +53,26 @@ impl Trail {
             None
         } else {
             Some(index.floor() as u16)
+        }
+    }
+
+    /// Return the distance between the end of the active segment of `self`
+    /// to the beginning of `other`, but only if its magnitude is less than 1.0.
+    fn gap_to(&self, other: &Trail) -> Option<f32> {
+        let (head1, head2, head_fract) = other.point_on_trail(0.0).ok()?;
+        let (tail1, tail2, tail_fract) = self.point_on_trail(self.length as f32).ok()?;
+        // Cases:
+        if head1 == tail1 && head2 == tail2 {
+            // In same track
+            Some(tail_fract - head_fract)
+        } else if head2 == tail1 {
+            // In following tracks
+            Some((1.0 - head_fract) + tail_fract)
+        } else if head1 == tail2 {
+            // Weird case, when gap is negative, following tracks but other order
+            Some(-(head_fract + (1.0 - tail_fract)))
+        } else {
+            None
         }
     }
 }
@@ -160,71 +173,89 @@ fn append_vehicle_system(
     }
 }
 
-// Fixme: reversing can fuck this up I think
-fn apply_coupleable_component(
+fn coupling_system(
     mut commands: Commands,
-    mut evs: EventReader<CollisionEvent>,
-    bumpers: Query<&Parent, With<BumperNode>>,
+    mut trigger: EventReader<TrainClickEvent>,
+    rapier_context: Res<RapierContext>,
+    trains: Query<&Trail, With<TrainMarker>>,
     vehicles: Query<&Parent, With<VehicleType>>,
+    bumpers: Query<(&Parent, &BumperNode)>,
 ) {
-    for collision_event in evs.read() {
-        let (a, b, started) = match collision_event {
-            CollisionEvent::Started(a, b, _) => (a, b, true),
-            CollisionEvent::Stopped(a, b, _) => (a, b, false),
+    fn couple_trains(
+        In((t1, d1, t2, d2)): In<(Entity, BumperNode, Entity, BumperNode)>,
+        mut commands: Commands,
+        mut trains: Query<&mut Trail, With<TrainMarker>>,
+    ) {
+        let trail1 = ok_or_return!(trains.get(t1), "not a train");
+        let trail2 = ok_or_return!(trains.get(t2), "not a train");
+
+        // Cases:
+        // All cases are combined in 3 steps: figure out which one is the front train,
+        // the one which will survive and has the back appened to it.
+        // Then reverse one of the trains, given by `reverse`, and add the value from
+        // front length to all indices of the back train.
+        let ((front_id, front), (back_id, back), reverse) = match (d1, d2) {
+            // Front / back -> reindex back
+            (BumperNode::Front, BumperNode::Back) => ((t2, trail2), (t1, trail1), None),
+            (BumperNode::Back, BumperNode::Front) => ((t1, trail1), (t2, trail2), None),
+            // Front / front -> reverse one, reindex other
+            (BumperNode::Front, BumperNode::Front) => ((t1, trail1), (t2, trail2), Some(t1)),
+            // Back / back -> reverse & reindex one
+            (BumperNode::Back, BumperNode::Back) => ((t1, trail1), (t2, trail2), Some(t2)),
         };
-        let (Ok(v1), Ok(v2)) = (bumpers.get(*a), bumpers.get(*b)) else {
-            // Wasn't two bumpers
+        // Reindex is always given by back + front len
+
+        // Compute the gap (maybe reverse one trail for it)
+        // let gap = some_or_return!(trail2.gap_to(trail1));
+    }
+
+    for ev in trigger.read() {
+        let Ok(trail) = trains.get(ev.train) else {
+            error!("Train not found");
             continue;
         };
-        let (Ok(t1), Ok(t2)) = (vehicles.get(v1.get()), vehicles.get(v2.get())) else {
+
+        if !(ev.bumper_index == 0 || ev.bumper_index == trail.length) {
+            // cannot couple non-end vehicle
+            continue;
+        }
+
+        // this should ideally be exactly one pair
+        let mut pairs_iter = rapier_context
+            .intersection_pairs_with(ev.bumper_entity)
+            .filter(|(b1, b2, hit)| *hit && b1 != b2);
+        let Some((b1, b2, _)) = pairs_iter.next() else {
+            // nothing to couple to
+            continue;
+        };
+        if let Some((b3, b4, _)) = pairs_iter.next() {
+            warn!("Conflicting coupling: {b1:?}-{b2:?} vs {b3:?}-{b4:?}");
+            continue;
+        }
+
+        let (Ok((v1, &d1)), Ok((v2, &d2))) = (bumpers.get(b1), bumpers.get(b2)) else {
             error!("BumperNode should always be attached to a vehicle!");
             continue;
         };
-        let (t1, t2) = (t1.get(), t2.get());
-
-        if t1 == t2 {
-            continue;
-        }
-
-        if started {
-            debug!("Trains {t1:?} and {t2:?} are now coupleable");
-        } else {
-            debug!("Trains {t1:?} and {t2:?} are not coupleable anymore");
-        }
-
-        if let Some(mut cmd) = commands.get_entity(t1) {
-            if started {
-                cmd.insert(CoupleableTo(t2));
-            } else {
-                cmd.remove::<CoupleableTo>();
-            }
-        }
-        if let Some(mut cmd) = commands.get_entity(t2) {
-            if started {
-                cmd.insert(CoupleableTo(t1));
-            } else {
-                cmd.remove::<CoupleableTo>();
-            }
-        }
-    }
-}
-
-fn coupling_system(
-    mut trigger: EventReader<TrainClickEvent>,
-    trains: Query<(&CoupleableTo, &Trail), With<TrainMarker>>,
-) {
-    for ev in trigger.read() {
-        let Ok((coupleable, trail)) = trains.get(ev.train) else {
-            // is not couplable probably
+        let (Ok(t1), Ok(t2)) = (vehicles.get(v1.get()), vehicles.get(v2.get())) else {
+            error!("Vehicle should always be attached to a train!");
             continue;
         };
-        // TODO: was the correct side pressed?
+        let (t1, t2) = (t1.get(), t2.get());
+        if t1 == t2 {
+            warn!("Trying to self-couple: {t1:?}");
+            continue;
+        }
+
+        commands.add(move |world: &mut World| {
+            // TODO: for better performance, use a registered system.
+            world.run_system_once_with((t1, d1, t2, d2), couple_trains);
+        })
     }
 }
 
 fn uncoupling_system(
     mut commands: Commands,
-    reindex_command: Res<ReindexSystemLabel>,
     mut trigger: EventReader<TrainClickEvent>,
     vehicles: Query<(Entity, &TrainIndex)>,
     trains: Query<(Entity, &Trail, &Children)>,
@@ -268,19 +299,16 @@ fn uncoupling_system(
         };
         back_trail.trim_front();
 
-        let reindex_command = reindex_command.0.clone();
         commands
             .spawn(TrainBundle::new(
                 back_trail, 55.0, // approx 200kmh
             ))
             .push_children(&to_reparent);
         commands.add(move |world: &mut World| {
-            if let Err(e) = world.run_system_with_input(
-                reindex_command,
+            world.run_system_once_with(
                 (to_reparent, train, front_length, back_length),
-            ) {
-                error!("couldn't run reindex_system_command: {e:?}");
-            }
+                reindex_system_command,
+            );
         })
     }
 }
@@ -369,7 +397,6 @@ pub fn spawn_wagon(
             .insert(uncouple_dir)
             .insert(Collider::ball(TILE_WIDTH / 16.))
             .insert(Sensor)
-            .insert(ActiveEvents::COLLISION_EVENTS)
             .insert(ActiveCollisionTypes::STATIC_STATIC)
             .insert(CollisionGroups::new(BUMPER_GROUP, BUMPER_GROUP))
             .id()
