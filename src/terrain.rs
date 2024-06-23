@@ -84,7 +84,7 @@ fn spawn_terrain_tile(
 
     let child = commands
         .spawn(sprite)
-        .insert(Name::new(format!("Tile {}", position)))
+        .insert(Name::new(format!("Tile {:?}", position)))
         .insert(TileMarker)
         .insert(position)
         .id();

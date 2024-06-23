@@ -3,7 +3,7 @@ use std::{f32::consts::PI, ops::Add};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::tilemap::Joint;
+use crate::tilemap::{Joint, Tile};
 
 /// The length in meters that a single track covers.
 ///
@@ -210,6 +210,36 @@ impl Trail {
         (self.path.len() >= self.length as usize + 1)
             && (self.path_progress >= self.length as f32 - 0.01)
             && (self.path_progress <= self.path.len() as f32 - 0.99)
+    }
+}
+
+/// This is sligthly weird, but way more compact debug representation
+///
+/// todo: explain how to read this better, the idea is that the active part is
+/// hightlighted, but right now, the split is not between the active splits,
+/// but around the...
+impl std::fmt::Debug for Trail {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn map_tile_only(j: &Joint) -> &Tile {
+            &j.tile
+        }
+
+        f.debug_list()
+            .entries(
+                self.path[..(self.path_progress.floor() as usize - self.length as usize)]
+                    .iter()
+                    .map(map_tile_only),
+            )
+            .entry(&"|")
+            .entries(self.trim().iter().map(map_tile_only))
+            .entry(&format!("{:.2} >", self.path_progress))
+            .entries(
+                self.path
+                    .iter()
+                    .skip((self.path_progress.ceil() as usize) + 1)
+                    .map(map_tile_only),
+            )
+            .finish()
     }
 }
 

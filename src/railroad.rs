@@ -110,7 +110,7 @@ impl RailGraph {
             track.joint.opposite(),
             TrackProperties {},
         );
-        debug!("Rail built @{} -> {}", track.joint.tile, end_joint.tile);
+        debug!("Rail built @{:?} -> {:?}", track.joint.tile, end_joint.tile);
 
         // Either both or neither prev edge should have existed
         if prev_edge_1.is_none() != prev_edge_2.is_none() {
@@ -185,7 +185,7 @@ pub fn spawn_rail(
 
     let child = commands
         .spawn(sprite)
-        .insert(Name::new(format!("Rail {}", track.joint.tile)))
+        .insert(Name::new(format!("Rail {:?}", track.joint.tile)))
         .insert(RailMarker)
         .insert(track.joint.tile)
         .id();

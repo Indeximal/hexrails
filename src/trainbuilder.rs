@@ -344,7 +344,7 @@ fn create_new_train(
     rail_graph: &RailGraph,
     wagon_type: VehicleType,
 ) {
-    info!("Creating train at @{}", face.tile);
+    info!("Creating train at @{:?}", face.tile);
 
     let next_face = rail_graph
         .graph

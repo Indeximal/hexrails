@@ -26,18 +26,7 @@ impl Plugin for TileMapPlugin {
 /// A integer vector coordinate for a tile. First coordinate is towards east,
 /// the second towards north-east.
 #[derive(
-    Component,
-    Serialize,
-    Deserialize,
-    Default,
-    Debug,
-    Clone,
-    Copy,
-    Hash,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
+    Component, Serialize, Deserialize, Default, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord,
 )]
 pub struct Tile(pub i32, pub i32);
 
@@ -195,7 +184,7 @@ impl Joint {
     }
 }
 
-impl fmt::Display for Tile {
+impl fmt::Debug for Tile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({}, {})", self.0, self.1)
         // write!(

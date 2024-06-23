@@ -1,4 +1,5 @@
-/// Module for manually driving a train, including selection, throttle, brake and reverse.
+//! Module for manually driving a train, including selection, throttle, brake and reverse.
+
 use crate::{
     input::{Action, GameInput},
     interact::TrainClickEvent,

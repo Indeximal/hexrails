@@ -70,7 +70,7 @@ macro_rules! ok_or_tt {
             }
         }
     }};
-    ($ttt: tt, $x:expr, $err:literal) => {{
+    ($ttt: tt, $x:expr) => {{
         let Ok(x) = $x else {
             $ttt;
         };

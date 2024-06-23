@@ -172,6 +172,7 @@ fn load_game(world: &mut World, savegame: SaveGame) {
             error!("savegame contains broken trail, skipping loading this train");
             continue;
         }
+        debug!("Loading train on: {trail:?}");
 
         let mut wagons = Vec::new();
         for (index, wagon) in train.wagons.into_iter().enumerate() {
