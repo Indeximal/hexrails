@@ -47,7 +47,7 @@ pub struct TrainBundle {
 #[derive(Component)]
 pub struct TrainMarker;
 
-#[derive(Component, Serialize, Deserialize)]
+#[derive(Component, Clone, Serialize, Deserialize)]
 pub struct Trail {
     /// From 0 at the start to len at the destination. Must contain at least `length + 1` values.
     pub path: Vec<Joint>,
@@ -198,8 +198,32 @@ impl Trail {
         Ok((start, end, progress.fract()))
     }
 
+    pub fn trim_front(&self) -> &[Joint] {
+        &self.path[..=(self.path_progress.ceil() as usize)]
+    }
+
+    pub fn trim_back(&self) -> &[Joint] {
+        // FIXME: is this correct?
+        &self.path[(self.path_progress.floor() as usize - self.length as usize)..]
+    }
+
+    pub fn trim(&self) -> &[Joint] {
+        &self.path[(self.path_progress.floor() as usize - self.length as usize)
+            ..=(self.path_progress.ceil() as usize)]
+    }
+
+    /// Reverses the direction of this trail.
+    pub fn reverse(&mut self) {
+        // Reverse the path, use reversed edges and update the progress
+        self.path.reverse();
+        for d in self.path.iter_mut() {
+            *d = d.opposite();
+        }
+        self.path_progress = self.path.len() as f32 - self.path_progress + self.length as f32 - 1.;
+    }
+
     /// Shortens the path to not contain any extra tiles in front
-    pub fn trim_front(&mut self) {
+    pub fn remove_lead(&mut self) {
         while self.path.len() as f32 > self.path_progress + 2.0 {
             self.path.pop();
         }

@@ -265,7 +265,7 @@ fn emit_train_events(
             }
         }
 
-        debug!("Train {train:?} clicked at {bumper_index}");
+        trace!("Train {train:?} clicked at {bumper_index}");
         writer.send(TrainClickEvent {
             train,
             bumper_index,

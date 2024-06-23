@@ -75,6 +75,44 @@ impl Trail {
             None
         }
     }
+
+    /// Appends `back` to `front`.
+    ///
+    /// If they do not overlap, this returns `Err`.
+    /// If something goes wrong, e.g. if they overlap too much or invariants are broken,
+    /// this also returns and error and logs more info.
+    fn clone_from_parts(front: &Trail, back: &Trail) -> Result<Self, ()> {
+        // init vec with capacity, push back with trimmed front, push front with trimmed back.
+        let front_part = front.trim_back();
+        let back_part = back.trim_front();
+        let mut path = Vec::from(back_part);
+        // Combine, but skip overlap of 1, 2 or 3 joints.
+        let Some(overlap_index) = front_part.iter().position(|j| Some(j) == path.last()) else {
+            return Err(());
+        };
+        path.extend(front_part.iter().skip(overlap_index + 1));
+
+        // compute progress (by search, which isn't optimal, but okay)
+        let Ok((f_start, _, progress_frac)) = front.point_on_trail(0.0) else {
+            error!("clone_from_parts couldn't get front!");
+            return Err(());
+        };
+        let Some(progress_int) = path.iter().position(|j| *j == f_start) else {
+            error!("clone_from_parts couldn't find joining joint!");
+            return Err(());
+        };
+
+        let combined = Self {
+            path,
+            path_progress: progress_int as f32 + progress_frac,
+            length: front.length + back.length,
+        };
+        if !combined.check_invariant() {
+            error!("clone_from_parts constructed an invalid trail!");
+            return Err(());
+        }
+        Ok(combined)
+    }
 }
 
 /// This system tries to place a new train on click
@@ -184,7 +222,8 @@ fn coupling_system(
     fn couple_trains(
         In((t1, d1, t2, d2)): In<(Entity, BumperNode, Entity, BumperNode)>,
         mut commands: Commands,
-        mut trains: Query<&mut Trail, With<TrainMarker>>,
+        trains: Query<&Trail, With<TrainMarker>>,
+        child_query: Query<&Children>,
     ) {
         let trail1 = ok_or_return!(trains.get(t1), "not a train");
         let trail2 = ok_or_return!(trains.get(t2), "not a train");
@@ -203,10 +242,51 @@ fn coupling_system(
             // Back / back -> reverse & reindex one
             (BumperNode::Back, BumperNode::Back) => ((t1, trail1), (t2, trail2), Some(t2)),
         };
-        // Reindex is always given by back + front len
+        let front_len = front.length;
 
-        // Compute the gap (maybe reverse one trail for it)
+        // Construct a new trail anyway, with maybe too much cloning
+        // TODO: Check the gap here aswell
         // let gap = some_or_return!(trail2.gap_to(trail1));
+        let Ok(new_trail) = (match reverse {
+            None => Trail::clone_from_parts(front, back),
+            Some(reverse) if reverse == front_id => {
+                let mut front = front.clone();
+                front.reverse();
+                Trail::clone_from_parts(&front, back)
+            }
+            Some(reverse) if reverse == back_id => {
+                let mut back = back.clone();
+                back.reverse();
+                Trail::clone_from_parts(front, &back)
+            }
+            Some(_) => unreachable!("Was set to one of these values above"),
+        }) else {
+            warn!("Trails do not align");
+            return;
+        };
+
+        debug!("Coupling train {back_id:?} to {front_id:?}");
+
+        // Queue all the commands. I rely on them being executed in order.
+        if let Some(reverse) = reverse {
+            // Reverse train indices of one of the trains
+            commands
+                .add(move |world: &mut World| world.run_system_once_with(reverse, reverse_train));
+        }
+        commands.add(move |world: &mut World| {
+            world.run_system_once_with((back_id, front_len as i16), reindex_train)
+        });
+        commands
+            .entity(front_id)
+            // Overrite old trail component
+            .insert(new_trail)
+            // And append all newly gained vehicles
+            .push_children(ok_or_return!(
+                child_query.get(back_id),
+                "back has no children?"
+            ));
+        // No recursive needed, children have just been moved
+        commands.entity(back_id).despawn();
     }
 
     for ev in trigger.read() {
@@ -248,6 +328,8 @@ fn coupling_system(
         }
 
         commands.add(move |world: &mut World| {
+            // This actually leads to a two deep `run_system_once_with` invocation,
+            // I hope this is fine.
             // TODO: for better performance, use a registered system.
             world.run_system_once_with((t1, d1, t2, d2), couple_trains);
         })
@@ -297,41 +379,54 @@ fn uncoupling_system(
             path_progress: trail.path_progress - front_length as f32,
             length: back_length,
         };
-        back_trail.trim_front();
+        back_trail.remove_lead();
 
-        commands
+        let new_train_id = commands
             .spawn(TrainBundle::new(
                 back_trail, 55.0, // approx 200kmh
             ))
-            .push_children(&to_reparent);
+            .push_children(&to_reparent)
+            .id();
         commands.add(move |world: &mut World| {
-            world.run_system_once_with(
-                (to_reparent, train, front_length, back_length),
-                reindex_system_command,
-            );
+            // The front trail has to be shortened by back_length,
+            // while the vehicles in to_reindex have to have front_length subtracted.
+            world.run_system_once_with((new_train_id, -(front_length as i16)), reindex_train);
+            world.run_system_once_with((train, front_length), set_train_length);
         })
     }
 }
 
-/// The mutating part of the `uncoupling_system`, since I want to apply them
+/// A mutating part of the `uncoupling_system`, since I want to apply them
 /// at a controlled time.
-///
-/// The front trail has to be shortened by back_length,
-/// while the vehicles in to_reindex have to have front_length subtracted.
-fn reindex_system_command(
-    In((to_reindex, to_shorten, front_len, back_len)): In<(Vec<Entity>, Entity, u16, u16)>,
-    mut train: Query<&mut Trail>,
-    mut vehicles: Query<&mut TrainIndex>,
+fn set_train_length(
+    In((train_id, new_len)): In<(Entity, u16)>,
+    mut train: Query<&mut Trail, With<TrainMarker>>,
 ) {
-    let Ok(mut t) = train.get_mut(to_shorten) else {
+    let Ok(mut t) = train.get_mut(train_id) else {
+        error!("set_train_length called with non train entity");
         return;
     };
-    t.length -= back_len;
+    t.length = new_len;
+}
+
+/// Helper system to add an offset to all vehicle indices of a train.
+///
+/// WARNING: this will temporarlily break the train invariant,
+/// this is only a part of the coupling/uncoupling process
+fn reindex_train(
+    In((train_id, diff)): In<(Entity, i16)>,
+    train: Query<&Children, With<TrainMarker>>,
+    mut vehicles: Query<&mut TrainIndex, With<VehicleType>>,
+) {
+    let Ok(children) = train.get(train_id) else {
+        error!("reindex_train called with non-train entity");
+        return;
+    };
 
     // Somehow doesn't allow a for loop
-    let mut iter = vehicles.iter_many_mut(&to_reindex);
+    let mut iter = vehicles.iter_many_mut(children.iter());
     while let Some(mut idx) = iter.fetch_next() {
-        idx.position -= front_len;
+        idx.position = idx.position.saturating_add_signed(diff);
     }
 }
 
