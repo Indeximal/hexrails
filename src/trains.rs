@@ -3,6 +3,7 @@ use std::{f32::consts::PI, ops::Add};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::ok_or_return;
 use crate::tilemap::{Joint, Tile};
 
 /// The length in meters that a single track covers.
@@ -353,4 +354,21 @@ fn move_train_unit(output: &mut Transform, start: Joint, end: Joint, t: f32) {
     let angle = start_angle + angle_diff * t;
     output.translation = pos.extend(output.translation.z);
     output.rotation = Quat::from_rotation_z(angle);
+}
+
+/// System to reverse a whole train
+pub fn reverse_train(
+    In(train_id): In<Entity>,
+    mut trains: Query<(&mut Trail, &Children)>,
+    mut vehicles: Query<&mut TrainIndex>,
+) {
+    let (mut trail, children) = ok_or_return!(trains.get_mut(train_id));
+    trail.reverse();
+
+    // Reverse the wagon indices
+    for &e in children.iter() {
+        if let Ok(mut idx) = vehicles.get_mut(e) {
+            idx.position = trail.length - idx.position - 1;
+        }
+    }
 }

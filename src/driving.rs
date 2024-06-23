@@ -10,7 +10,7 @@ use crate::{
 
 use petgraph::EdgeDirection;
 
-use bevy::prelude::*;
+use bevy::{ecs::system::RunSystemOnce, prelude::*};
 
 pub struct ManualDrivingPlugin;
 
@@ -104,35 +104,21 @@ fn throttling_system(
 
 /// System to reverse a whole train on key press
 fn reverse_train_system(
-    mut trains: Query<(&mut Trail, &Velocity, &Children), With<PlayerControlledTrain>>,
-    mut wagons: Query<&mut TrainIndex>,
+    mut commands: Commands,
+    trains: Query<(Entity, &Velocity), With<PlayerControlledTrain>>,
     input: Res<GameInput>,
 ) {
     if !input.just_pressed(&Action::Reverse) {
         return;
     }
-    for (mut controller, velocity, children) in trains.iter_mut() {
+    // FIXME: Allow the player to steer with controller.trim_front();
+    for (id, velocity) in trains.iter() {
         if velocity.velocity != 0. {
-            info!("Cannot reverse moving train!");
+            warn!("Cannot reverse moving train!");
             continue;
         }
-        // Reverse the path and use reversed edges
-        controller.path.reverse();
-        for d in controller.path.iter_mut() {
-            *d = d.opposite();
-        }
-        controller.path_progress =
-            controller.path.len() as f32 - controller.path_progress + controller.length as f32 - 1.;
 
-        // Allow the player to steer
-        controller.trim_front();
-
-        // Reverse the wagon indices
-        for &x in children.iter() {
-            if let Ok(mut wagon) = wagons.get_mut(x) {
-                wagon.position = controller.length - wagon.position - 1;
-            }
-        }
+        commands.add(move |world: &mut World| world.run_system_once_with(id, reverse_train));
     }
 }
 
