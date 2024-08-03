@@ -16,7 +16,7 @@ mod trainbuilder;
 mod trains;
 mod ui;
 
-pub const BG_COLOR: Color = Color::rgb(0.7, 0.7, 0.7);
+pub const BG_COLOR: Color = Color::srgb(0.7, 0.7, 0.7);
 pub const ASPECT_RATIO: f32 = 16.0 / 9.0;
 
 fn main() {

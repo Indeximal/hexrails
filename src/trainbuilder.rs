@@ -9,7 +9,7 @@ use crate::{
     interact::{InteractionNode, InteractionStatus, TileClickEvent, TrainClickEvent},
     ok_or_return,
     railroad::RailGraph,
-    sprites::{SpriteAtlases, VehicleSprite},
+    sprites::{SpriteAssets, VehicleSprite},
     tilemap::*,
     trains::*,
     ui::InteractingState,
@@ -118,7 +118,7 @@ impl Trail {
 /// This system tries to place a new train on click
 fn train_builder(
     mut commands: Commands,
-    atlas: Res<SpriteAtlases>,
+    atlas: Res<SpriteAssets>,
     mut click_event: EventReader<TileClickEvent>,
     rail_graph: Res<RailGraph>,
     state: Res<State<InteractingState>>,
@@ -163,7 +163,7 @@ fn append_vehicle_system(
     mut trigger: EventReader<TrainClickEvent>,
     trains: Query<&Trail>,
     mut commands: Commands,
-    atlas: Res<SpriteAtlases>,
+    atlas: Res<SpriteAssets>,
 ) {
     let InteractingState::PlaceTrains(wagon_type) = state.get() else {
         // Events are irrelevant
@@ -434,7 +434,7 @@ fn reindex_train(
 /// Precondition: `face` is in the `rail_graph` and has a neighbor.
 fn create_new_train(
     commands: &mut Commands,
-    atlas: &SpriteAtlases,
+    atlas: &SpriteAssets,
     face: Joint,
     rail_graph: &RailGraph,
     wagon_type: VehicleType,
@@ -470,7 +470,7 @@ fn create_new_train(
 /// Helper to spawn a wagon sprite
 pub fn spawn_wagon(
     commands: &mut Commands,
-    atlas: &SpriteAtlases,
+    atlas: &SpriteAssets,
     wagon_type: VehicleType,
     wagon_stats: VehicleStats,
     insert_index: u16,

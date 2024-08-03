@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rand::seq::SliceRandom;
 
-use crate::sprites::{SpriteAtlases, TerrainSprite};
+use crate::sprites::{SpriteAssets, TerrainSprite};
 use crate::tilemap::Tile;
 
 pub struct TerrainPlugin;
@@ -36,7 +36,7 @@ fn spawn_terrain_root(mut commands: Commands) {
 /// system to spawn some tiles in a hexagon
 fn spawn_tiles(
     mut commands: Commands,
-    atlas: Res<SpriteAtlases>,
+    assets: Res<SpriteAssets>,
     root_query: Query<Entity, With<TerrainRoot>>,
 ) {
     let root_entity = root_query.single();
@@ -47,25 +47,19 @@ fn spawn_tiles(
         } else {
             (-RADIUS - y)..=RADIUS
         } {
-            spawn_terrain_tile(
-                &mut commands,
-                &atlas,
-                root_entity,
-                TerrainType::Land,
-                Tile(x, y),
-            );
+            commands.entity(root_entity).with_children(|c| {
+                c.spawn(terrain_tile_bundle(&assets, Tile(x, y), TerrainType::Land));
+            });
         }
     }
 }
 
-/// helper function to spawn a tile
-fn spawn_terrain_tile(
-    commands: &mut Commands,
-    atlas: &SpriteAtlases,
-    root_entity: Entity,
-    terrain_type: TerrainType,
+/// Generates a (not deterministic) bundle for a tile entity for a given type and position
+fn terrain_tile_bundle(
+    assets: &SpriteAssets,
     position: Tile,
-) {
+    terrain_type: TerrainType,
+) -> impl Bundle {
     let &sprite_id = match terrain_type {
         TerrainType::Land => [
             TerrainSprite::Land1,
@@ -79,15 +73,14 @@ fn spawn_terrain_tile(
         .expect("constant array is non-empty"),
     };
 
-    let mut sprite = atlas.terrain_sprite(sprite_id);
-    sprite.transform.translation += position.world_pos().extend(0.);
+    let mut sprite = assets.terrain_sprite(sprite_id);
+    // Place in the world
+    sprite.spatial.transform.translation += position.world_pos().extend(0.);
 
-    let child = commands
-        .spawn(sprite)
-        .insert(Name::new(format!("Tile {:?}", position)))
-        .insert(TileMarker)
-        .insert(position)
-        .id();
-
-    commands.entity(root_entity).add_child(child);
+    (
+        sprite,
+        Name::new(format!("Tile {:?}", position)),
+        TileMarker,
+        position,
+    )
 }

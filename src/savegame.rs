@@ -1,14 +1,14 @@
 use std::{error::Error, fs};
 
-use bevy::{ecs::system::CommandQueue, prelude::*};
+use bevy::{ecs::world::CommandQueue, prelude::*};
 
 use petgraph::graphmap::DiGraphMap;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::input::{Action, GameInput};
-use crate::railroad::{spawn_rail, NetworkRoot, RailGraph, Track};
-use crate::sprites::SpriteAtlases;
+use crate::railroad::{rail_tile_bundle, NetworkRoot, RailGraph, Track};
+use crate::sprites::SpriteAssets;
 use crate::trainbuilder::*;
 use crate::trains::*;
 
@@ -161,7 +161,7 @@ fn clean_game(world: &mut World) {
 
 /// Helper to spawn the dynamic game state from a savegame. Requires the state to be cleaned first.
 fn load_game(world: &mut World, savegame: SaveGame) {
-    let atlases = world.resource::<SpriteAtlases>();
+    let assets = world.resource::<SpriteAssets>();
     let mut command_queue = CommandQueue::default();
     let mut commands = Commands::new(&mut command_queue, world);
 
@@ -178,7 +178,7 @@ fn load_game(world: &mut World, savegame: SaveGame) {
         for (index, wagon) in train.wagons.into_iter().enumerate() {
             wagons.push(spawn_wagon(
                 &mut commands,
-                atlases,
+                assets,
                 wagon.wagon_type.get(),
                 wagon.stats.get(),
                 index as u16,
@@ -205,12 +205,14 @@ fn load_game(world: &mut World, savegame: SaveGame) {
         .id();
     let network = savegame.network.get();
     for (start, end, _edge) in network.graph.all_edges() {
-        let Some(tt) = Track::from_joints(start, end) else {
+        let Some(track) = Track::from_joints(start, end) else {
             error!("Broken Graph: edge which does not represent a track {start:?}->{end:?}");
             return;
         };
-        if tt.is_canonical_orientation() {
-            spawn_rail(&mut commands, atlases, rail_root, tt);
+        if track.is_canonical_orientation() {
+            commands.entity(rail_root).with_children(|c| {
+                c.spawn(rail_tile_bundle(&assets, track));
+            });
         }
     }
 

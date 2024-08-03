@@ -1,5 +1,6 @@
 use std::f32::consts::PI;
 
+use bevy::color::palettes;
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier2d::render::RapierDebugRenderPlugin;
@@ -35,7 +36,11 @@ fn joint_position(face: Joint) -> Vec2 {
 
 fn draw_rail_graph(graph: Res<RailGraph>, mut gizmos: Gizmos) {
     for (from, to, _) in graph.graph.all_edges() {
-        gizmos.line_2d(joint_position(from), joint_position(to), Color::BLUE);
+        gizmos.line_2d(
+            joint_position(from),
+            joint_position(to),
+            palettes::basic::BLUE,
+        );
     }
 }
 
@@ -48,9 +53,9 @@ fn draw_train_paths(trains: Query<(&Trail, Option<&PlayerControlledTrain>)>, mut
                 from.world_position(),
                 to.world_position(),
                 if player_control.is_some() {
-                    Color::GREEN
+                    palettes::basic::GREEN
                 } else {
-                    Color::DARK_GREEN
+                    palettes::basic::OLIVE
                 },
             );
         }

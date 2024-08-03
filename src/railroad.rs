@@ -1,6 +1,6 @@
 use crate::interact::TileClickEvent;
 use crate::sprites::RailSprite;
-use crate::sprites::SpriteAtlases;
+use crate::sprites::SpriteAssets;
 use crate::tilemap::Joint;
 use crate::ui::InteractingState;
 
@@ -123,7 +123,7 @@ impl RailGraph {
 /// This system tries to build rails both in the graph and with sprites when the mouse is clicked.
 fn rail_builder(
     mut commands: Commands,
-    atlas: Res<SpriteAtlases>,
+    assets: Res<SpriteAssets>,
     mut click_event: EventReader<TileClickEvent>,
     mut rail_graph: ResMut<RailGraph>,
     root_query: Query<Entity, With<NetworkRoot>>,
@@ -153,7 +153,9 @@ fn rail_builder(
                     };
                     let is_new_track = rail_graph.add_double_track(track);
                     if is_new_track {
-                        spawn_rail(&mut commands, &atlas, root_entity, track);
+                        commands.entity(root_entity).with_children(|c| {
+                            c.spawn(rail_tile_bundle(&assets, track));
+                        });
                     }
                 }
                 _ => (),
@@ -162,33 +164,29 @@ fn rail_builder(
     }
 }
 
-/// This helper function spawns a rail sprite.
-pub fn spawn_rail(
-    commands: &mut Commands,
-    atlas: &SpriteAtlases,
-    root_entity: Entity,
-    track: Track,
-) {
+/// Generates a bundle for a track tile entity
+pub fn rail_tile_bundle(assets: &SpriteAssets, track: Track) -> impl Bundle {
     let flipped = match track.heading {
         TrackType::Straight => false,
         TrackType::CurvedLeft => true,
         TrackType::CurvedRight => false,
     };
-    let mut sprite = atlas.rail_sprite(match track.heading {
+    let mut sprite = assets.rail_sprite(match track.heading {
         TrackType::Straight => RailSprite::Straight,
         TrackType::CurvedLeft => RailSprite::CurvedRight,
         TrackType::CurvedRight => RailSprite::CurvedRight,
     });
     sprite.sprite.flip_y = flipped;
-    sprite.transform.rotate_z(track.joint.side.to_angle());
-    sprite.transform.translation += track.joint.tile.world_pos().extend(0.);
+    sprite
+        .spatial
+        .transform
+        .rotate_z(track.joint.side.to_angle());
+    sprite.spatial.transform.translation += track.joint.tile.world_pos().extend(0.);
 
-    let child = commands
-        .spawn(sprite)
-        .insert(Name::new(format!("Rail {:?}", track.joint.tile)))
-        .insert(RailMarker)
-        .insert(track.joint.tile)
-        .id();
-
-    commands.entity(root_entity).add_child(child);
+    (
+        sprite,
+        Name::new(format!("Rail {:?}", track.joint.tile)),
+        RailMarker,
+        track.joint.tile,
+    )
 }

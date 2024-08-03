@@ -14,6 +14,7 @@
 //! [`TrainClickEvent`] are generated in addition to the other two events.
 //!
 
+use bevy::color::palettes;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_inspector_egui::bevy_egui::EguiContext;
@@ -282,17 +283,12 @@ fn draw_interaction_nodes(
         let position = position.translation();
 
         let color = match status {
-            InteractionStatus::None => Color::GRAY,
-            InteractionStatus::Hit => Color::YELLOW,
-            InteractionStatus::NearestHit => Color::ORANGE_RED,
+            InteractionStatus::None => palettes::basic::GRAY,
+            InteractionStatus::Hit => palettes::basic::YELLOW,
+            InteractionStatus::NearestHit => palettes::basic::RED,
         };
 
-        gizmos.circle(
-            position.xy().extend(0.0),
-            Direction3d::Z,
-            node.radius,
-            color,
-        );
+        gizmos.circle(position.xy().extend(0.0), Dir3::Z, node.radius, color);
     }
 }
 

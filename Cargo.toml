@@ -6,14 +6,36 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# sudo apt install g++ pkg-config libx11-dev libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
-bevy = { version = "0.13", default-features = false, features = ["bevy_asset", "bevy_core_pipeline", "bevy_gizmos", "bevy_render", "bevy_sprite", "bevy_ui", "bevy_winit", "multi-threaded", "png", "dynamic_linking"] }
-bevy-inspector-egui = { version = "0.24.0", default-features = false }
-bevy_pancam = { version = "0.11.0", features = ["bevy_egui"] }
-leafwing-input-manager = "0.13"
+# -- Bevy stuff (need to update versions on every bevy release)
+# deps: `sudo apt install g++ pkg-config libx11-dev libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-0`
+bevy = { version = "0.14", default-features = false, features = [
+    "bevy_asset",
+    "bevy_core_pipeline",
+    "bevy_gizmos",
+    "bevy_render",
+    "bevy_sprite",
+    "bevy_ui",
+    "bevy_winit",
+    "multi_threaded",
+    "png",
+    "dynamic_linking",
+    "bevy_state",
+    # This is needed on my linux machine otherwise winit doesn't build...
+    "x11",
+] }
+# https://github.com/jakobhellermann/bevy-inspector-egui
+bevy-inspector-egui = { version = "0.25.0", default-features = false, features = [
+    "bevy_render",
+] }
+# https://github.com/johanhelsing/bevy_pancam
+bevy_pancam = { version = "0.12.0", features = ["bevy_egui"] }
+# https://docs.rs/bevy_rapier2d/latest/bevy_rapier2d/
+bevy_rapier2d = "0.27.0"
+# https://github.com/Leafwing-Studios/leafwing-input-manager
+leafwing-input-manager = "0.14"
+
+# -- Other dependencies
 petgraph = { version = "0.6.4", features = ["serde-1"] }
 rand = "0.8.5"
-bevy_rapier2d = "0.26.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-

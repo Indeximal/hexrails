@@ -35,7 +35,7 @@ fn button_hightlighting(
     }
     for (mut color, target_state) in button_query.iter_mut() {
         *color = if target_state.0 == *state.get() {
-            Color::rgb(0.8, 0.8, 0.8)
+            Color::srgb(0.8, 0.8, 0.8)
         } else {
             Color::WHITE
         }

@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::ok_or_return;
+use crate::sprites::BaseSpriteBundle;
 use crate::tilemap::{Joint, Tile};
 
 /// The length in meters that a single track covers.
@@ -99,7 +100,7 @@ pub struct VehicleBundle {
     /// The visuals, including transform and visibility.
     ///
     /// The transform gets set every frame to match the train position.
-    pub visuals: SpriteSheetBundle,
+    pub visuals: BaseSpriteBundle,
 }
 
 #[derive(Component, Serialize, Deserialize)]
@@ -352,7 +353,7 @@ fn update_tint(
         let color = if has_crashed.is_none() {
             Color::WHITE
         } else {
-            Color::GRAY
+            Srgba::gray(0.7).into()
         };
         for &child in children.iter() {
             if let Ok(mut sprite) = vehicles.get_mut(child) {

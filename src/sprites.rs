@@ -12,9 +12,9 @@ use bevy::prelude::*;
 use crate::tilemap::TILE_SCALE;
 
 /// Texture resolution for a single tile.
-const TILE_RESOLUTION: f32 = 128.;
+const TILE_RESOLUTION: u32 = 128;
 /// The padding in pixels to each side for each tile.
-const TILE_PADDING: f32 = 1.;
+const TILE_PADDING: u32 = 1;
 
 const Z_LAYER_TERRAIN: f32 = 0.1;
 const Z_LAYER_RAILS: f32 = 0.2;
@@ -30,7 +30,7 @@ impl Plugin for AssetPlugin {
 }
 
 #[derive(Resource)]
-pub struct SpriteAtlases {
+pub struct SpriteAssets {
     terrain: (Handle<TextureAtlasLayout>, Handle<Image>),
     rails: (Handle<TextureAtlasLayout>, Handle<Image>),
     vehicles: (Handle<TextureAtlasLayout>, Handle<Image>),
@@ -55,39 +55,49 @@ pub enum VehicleSprite {
     PurpleBullet = 1,
 }
 
-impl SpriteAtlases {
+/// A [`Bundle`] of components for drawing a single sprite from a sprite sheet
+#[derive(Bundle, Clone, Debug, Default)]
+pub struct BaseSpriteBundle {
+    /// Specifies the rendering properties of the sprite, such as color tint and flip.
+    pub sprite: Sprite,
+    /// The sprite sheet base texture
+    pub texture: Handle<Image>,
+    /// The sprite sheet texture atlas, allowing to draw a custom section of `texture`.
+    pub atlas: TextureAtlas,
+    /// The spatial properties of the sprite, including position and visiblity.
+    pub spatial: SpatialBundle,
+}
+
+impl SpriteAssets {
     fn sprite_bundle(
         tex_atlas: &(Handle<TextureAtlasLayout>, Handle<Image>),
         index: usize,
         z: f32,
-    ) -> SpriteSheetBundle {
-        SpriteSheetBundle {
+    ) -> BaseSpriteBundle {
+        BaseSpriteBundle {
             sprite: Sprite {
                 custom_size: Some(Vec2::splat(TILE_SCALE)),
                 ..Default::default()
             },
+            texture: tex_atlas.1.clone(),
             atlas: TextureAtlas {
                 layout: tex_atlas.0.clone(),
                 index: index,
                 ..Default::default()
             },
-            transform: Transform {
-                translation: Vec3::Z * z,
-                ..Default::default()
-            },
-            texture: tex_atlas.1.clone(),
+            spatial: SpatialBundle::from_transform(Transform::from_translation(Vec3::Z * z)),
             ..Default::default()
         }
     }
-    pub fn terrain_sprite(&self, sprite: TerrainSprite) -> SpriteSheetBundle {
+    pub fn terrain_sprite(&self, sprite: TerrainSprite) -> BaseSpriteBundle {
         Self::sprite_bundle(&self.terrain, sprite as usize, Z_LAYER_TERRAIN)
     }
 
-    pub fn rail_sprite(&self, sprite: RailSprite) -> SpriteSheetBundle {
+    pub fn rail_sprite(&self, sprite: RailSprite) -> BaseSpriteBundle {
         Self::sprite_bundle(&self.rails, sprite as usize, Z_LAYER_RAILS)
     }
 
-    pub fn vehicle_sprite(&self, sprite: VehicleSprite) -> SpriteSheetBundle {
+    pub fn vehicle_sprite(&self, sprite: VehicleSprite) -> BaseSpriteBundle {
         Self::sprite_bundle(&self.vehicles, sprite as usize, Z_LAYER_TRAINS)
     }
 }
@@ -99,32 +109,32 @@ fn load_texture_atlases(
     asset_server: Res<AssetServer>,
 ) {
     let terrain = TextureAtlasLayout::from_grid(
-        Vec2::new(TILE_RESOLUTION, TILE_RESOLUTION),
+        UVec2::new(TILE_RESOLUTION, TILE_RESOLUTION),
         1,
         3,
-        Some(Vec2::splat(2. * TILE_PADDING)),
-        Some(Vec2::splat(TILE_PADDING)),
+        Some(UVec2::splat(2 * TILE_PADDING)),
+        Some(UVec2::splat(TILE_PADDING)),
     );
     let rails = TextureAtlasLayout::from_grid(
-        Vec2::new(TILE_RESOLUTION, TILE_RESOLUTION),
+        UVec2::new(TILE_RESOLUTION, TILE_RESOLUTION),
         1,
         2,
-        Some(Vec2::splat(2. * TILE_PADDING)),
-        Some(Vec2::splat(TILE_PADDING)),
+        Some(UVec2::splat(2 * TILE_PADDING)),
+        Some(UVec2::splat(TILE_PADDING)),
     );
     let vehicles = TextureAtlasLayout::from_grid(
-        Vec2::new(TILE_RESOLUTION, TILE_RESOLUTION),
+        UVec2::new(TILE_RESOLUTION, TILE_RESOLUTION),
         1,
         2,
-        Some(Vec2::splat(2. * TILE_PADDING)),
-        Some(Vec2::splat(TILE_PADDING)),
+        Some(UVec2::splat(2 * TILE_PADDING)),
+        Some(UVec2::splat(TILE_PADDING)),
     );
 
     let terrain_tex = asset_server.load("TerrainAtlas.png");
     let rails_tex = asset_server.load("RailAtlas.png");
     let vehicles_tex = asset_server.load("TrainAtlas.png");
 
-    commands.insert_resource(SpriteAtlases {
+    commands.insert_resource(SpriteAssets {
         terrain: (texture_atlas.add(terrain), terrain_tex),
         rails: (texture_atlas.add(rails), rails_tex),
         vehicles: (texture_atlas.add(vehicles), vehicles_tex),
