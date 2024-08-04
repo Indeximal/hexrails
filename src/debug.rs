@@ -5,6 +5,9 @@ use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier2d::render::RapierDebugRenderPlugin;
 
+use crate::input::{
+    BuildingState, DebugGizmosState, MenuAction, MenuInput, MenuState, SpawningState,
+};
 use crate::interact::{NodeClickEvent, TileClickEvent};
 use crate::railroad::RailGraph;
 use crate::tilemap::{Joint, TILE_SCALE};
@@ -14,15 +17,37 @@ pub struct DebugPlugin;
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
         if cfg!(debug_assertions) {
-            app.add_plugins(WorldInspectorPlugin::new())
-                .add_plugins(RapierDebugRenderPlugin::default())
-                .register_type::<Velocity>()
-                .add_systems(Update, (draw_rail_graph, draw_train_paths, log_collisions))
-                .add_systems(Update, log_interaction_events);
+            app.add_plugins(
+                WorldInspectorPlugin::new().run_if(in_state(DebugGizmosState::Enabled)),
+            )
+            // TODO: toggle rapier gizmos aswell
+            .add_plugins(RapierDebugRenderPlugin::default())
+            .register_type::<Velocity>()
+            .add_systems(
+                Update,
+                (draw_rail_graph, draw_train_paths).run_if(in_state(DebugGizmosState::Enabled)),
+            )
+            .add_systems(Update, (log_interaction_events, log_collisions))
+            .add_systems(Update, help_print_states);
         }
         // For framerate:
         // .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
         // .add_plugins(bevy::diagnostic::LogDiagnosticsPlugin::default())
+    }
+}
+
+fn help_print_states(
+    input: Res<MenuInput>,
+    menu_state: Res<State<MenuState>>,
+    build_state: Res<State<BuildingState>>,
+    spawn_state: Res<State<SpawningState>>,
+) {
+    if input.just_pressed(&MenuAction::Help) {
+        match menu_state.get() {
+            MenuState::Driving => info!("State: Driving"),
+            MenuState::Building => info!("State: Building {:?}", build_state.get()),
+            MenuState::Spawning => info!("State: Spawning {:?}", spawn_state.get()),
+        };
     }
 }
 

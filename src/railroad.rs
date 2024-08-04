@@ -1,8 +1,9 @@
+use crate::input::BuildingState;
+use crate::input::MenuState;
 use crate::interact::TileClickEvent;
 use crate::sprites::RailSprite;
 use crate::sprites::SpriteAssets;
 use crate::tilemap::Joint;
-use crate::ui::InteractingState;
 
 use bevy::prelude::*;
 use petgraph::graphmap::DiGraphMap;
@@ -11,7 +12,7 @@ use serde::{Deserialize, Serialize};
 pub struct RailRoadPlugin;
 impl Plugin for RailRoadPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, rail_builder);
+        app.add_systems(Update, rail_builder.run_if(in_state(MenuState::Building)));
     }
 }
 
@@ -127,16 +128,9 @@ fn rail_builder(
     mut click_event: EventReader<TileClickEvent>,
     mut rail_graph: ResMut<RailGraph>,
     root_query: Query<Entity, With<NetworkRoot>>,
-    state: Res<State<InteractingState>>,
+    state: Res<State<BuildingState>>,
 ) {
-    let rail_type = match state.get() {
-        InteractingState::PlaceRails(v) => v.clone(),
-        _ => {
-            // Currently events are irrelevant
-            click_event.clear();
-            return;
-        }
-    };
+    let BuildingState::LayTrack(rail_type) = *state.get();
     let rail_graph = rail_graph.as_mut();
     let root_entity = root_query.single();
 

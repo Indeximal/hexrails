@@ -9,7 +9,8 @@ use bevy::prelude::*;
 use bevy::render::camera::ScalingMode;
 use bevy_pancam::{PanCam, PanCamPlugin};
 
-use crate::{input::GameInput, ASPECT_RATIO};
+use crate::input::{CameraAction, CameraInput};
+use crate::ASPECT_RATIO;
 
 pub struct MovingCameraPlugin;
 
@@ -88,13 +89,13 @@ impl Default for FlyCamera2d {
 
 fn camera_2d_movement_system(
     time: Res<Time>,
-    action_state: Res<GameInput>,
+    action_state: Res<CameraInput>,
     mut query: Query<(&mut FlyCamera2d, &mut Transform)>,
 ) {
     for (mut options, mut transform) in query.iter_mut() {
         let (axis_h, axis_v) = if options.enabled {
             let axis = action_state
-                .clamped_axis_pair(&crate::input::Action::CameraMove)
+                .clamped_axis_pair(&CameraAction::Move)
                 .expect("Camera Motion should be a dual axis");
             (axis.x(), axis.y())
         } else {

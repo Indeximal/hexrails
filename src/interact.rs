@@ -20,7 +20,6 @@ use bevy::prelude::*;
 use bevy_inspector_egui::bevy_egui::EguiContext;
 
 use crate::camera::WorldViewCam;
-use crate::input::Action;
 use crate::tilemap::{Direction, Joint, Tile};
 use crate::trains::{BumperNode, Trail, TrainIndex};
 
@@ -86,7 +85,7 @@ pub struct NodeClickEvent {
     /// The entity with the [`InteractionNode`] component.
     pub node: Entity,
     /// The action that was taken to trigger this event.
-    pub action: Action,
+    // pub action: Action,
     /// Was this the nearest node hitting the click?
     ///
     /// If this is false, this was just another node that was also below the cursor,
@@ -113,6 +112,7 @@ pub struct TrainClickEvent {
 
 /// System for generating the interaction events..
 ///
+/// FIXME
 /// Currently uses `bevy_input` directly, see
 /// <https://github.com/Leafwing-Studios/leafwing-input-manager/issues/527>
 fn emit_events(
@@ -139,7 +139,7 @@ fn emit_events(
         node_event_writer.send(NodeClickEvent {
             node: id,
             // FIXME: should depend on input of course...
-            action: Action::Build,
+            // action: Action::Build,
             primary: is_primary,
         });
     }

@@ -6,13 +6,13 @@ use bevy_rapier2d::{
 use petgraph::EdgeDirection;
 
 use crate::{
+    input::{MenuState, SpawningState},
     interact::{InteractionNode, InteractionStatus, TileClickEvent, TrainClickEvent},
     ok_or_return,
     railroad::RailGraph,
     sprites::{SpriteAssets, VehicleSprite},
     tilemap::*,
     trains::*,
-    ui::InteractingState,
 };
 
 pub struct TrainBuildingPlugin;
@@ -21,13 +21,9 @@ impl Plugin for TrainBuildingPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (
-                train_builder,
-                append_vehicle_system,
-                uncoupling_system,
-                coupling_system,
-            ),
-        );
+            (train_builder, append_vehicle_system).run_if(in_state(MenuState::Spawning)),
+        )
+        .add_systems(Update, (uncoupling_system, coupling_system));
     }
 }
 
@@ -121,10 +117,10 @@ fn train_builder(
     atlas: Res<SpriteAssets>,
     mut click_event: EventReader<TileClickEvent>,
     rail_graph: Res<RailGraph>,
-    state: Res<State<InteractingState>>,
+    state: Res<State<SpawningState>>,
 ) {
     let graph = rail_graph.as_ref();
-    let InteractingState::PlaceTrains(wagon_type) = state.get() else {
+    let SpawningState::SpawnVehicle(wagon_type) = *state.get() else {
         // Events are irrelevant
         click_event.clear();
         return;
@@ -148,7 +144,7 @@ fn train_builder(
             continue;
         }
 
-        create_new_train(&mut commands, &atlas, face, &graph, *wagon_type);
+        create_new_train(&mut commands, &atlas, face, &graph, wagon_type);
     }
 }
 
@@ -159,13 +155,13 @@ fn train_builder(
 /// FIXME: this is slightly fucked if you have a train without power, as you cannot extend
 /// the path without driving right now.
 fn append_vehicle_system(
-    state: Res<State<InteractingState>>,
+    state: Res<State<SpawningState>>,
     mut trigger: EventReader<TrainClickEvent>,
     trains: Query<&Trail>,
     mut commands: Commands,
     atlas: Res<SpriteAssets>,
 ) {
-    let InteractingState::PlaceTrains(wagon_type) = state.get() else {
+    let SpawningState::SpawnVehicle(wagon_type) = state.get() else {
         // Events are irrelevant
         trigger.clear();
         return;

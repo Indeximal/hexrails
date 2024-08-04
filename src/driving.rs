@@ -1,11 +1,10 @@
 //! Module for manually driving a train, including selection, throttle, brake and reverse.
 
 use crate::{
-    input::{Action, GameInput},
+    input::{DriveAction, DriveInput, MenuState},
     interact::TrainClickEvent,
     railroad::{RailGraph, Track, TrackType},
     trains::*,
-    ui::InteractingState,
 };
 
 use petgraph::EdgeDirection;
@@ -24,7 +23,8 @@ impl Plugin for ManualDrivingPlugin {
                 reverse_train_system,
                 // after, so that acceleration gets cleared properly
                 train_selection_system.after(throttling_system),
-            ),
+            )
+                .run_if(in_state(MenuState::Driving)),
         );
     }
 }
@@ -32,11 +32,11 @@ impl Plugin for ManualDrivingPlugin {
 /// System to extend the path of trains if necessary. Useful mosty for manual driving.
 fn auto_extend_train_path(
     mut trains: Query<(&mut Trail, Option<&PlayerControlledTrain>)>,
-    input: Res<GameInput>,
+    input: Res<DriveInput>,
     graph_res: Res<RailGraph>,
 ) {
     let graph = &graph_res.graph;
-    let steer_value = input.value(&Action::SwitchDirection);
+    let steer_value = input.value(&DriveAction::SwitchDirection);
     let preferred_direction = if steer_value > 0.0 {
         TrackType::CurvedRight
     } else if steer_value < 0.0 {
@@ -89,14 +89,14 @@ fn auto_extend_train_path(
 /// System to set the acceleration of the player driven train
 fn throttling_system(
     mut train: Query<&mut Controller, With<PlayerControlledTrain>>,
-    input: Res<GameInput>,
+    input: Res<DriveInput>,
 ) {
     for mut controller in train.iter_mut() {
-        controller.throttle = input.value(&Action::Accelerate);
-        controller.brake = input.value(&Action::Brake);
+        controller.throttle = input.value(&DriveAction::Accelerate);
+        controller.brake = input.value(&DriveAction::Brake);
 
         // allow for somewhat of a one pedal drive
-        if !input.pressed(&Action::Brake) && !input.pressed(&Action::Accelerate) {
+        if !input.pressed(&DriveAction::Brake) && !input.pressed(&DriveAction::Accelerate) {
             controller.brake = 0.1;
         }
     }
@@ -106,9 +106,9 @@ fn throttling_system(
 fn reverse_train_system(
     mut commands: Commands,
     trains: Query<(Entity, &Velocity), With<PlayerControlledTrain>>,
-    input: Res<GameInput>,
+    input: Res<DriveInput>,
 ) {
-    if !input.just_pressed(&Action::Reverse) {
+    if !input.just_pressed(&DriveAction::Reverse) {
         return;
     }
     // FIXME: Allow the player to steer with controller.trim_front();
@@ -125,19 +125,9 @@ fn reverse_train_system(
 /// System to enter and exit trains on click
 fn train_selection_system(
     mut commands: Commands,
-    state: Res<State<InteractingState>>,
     mut click_event: EventReader<TrainClickEvent>,
     mut controlled_train: Query<(Entity, &mut Controller), With<PlayerControlledTrain>>,
 ) {
-    match state.get() {
-        InteractingState::SelectTrain => {}
-        _ => {
-            // Events are irrelevant
-            click_event.clear();
-            return;
-        }
-    };
-
     // Skip all old events, why not. (please let this not lead to a bug xD)
     let Some(ev) = click_event.read().last() else {
         return;

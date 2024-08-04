@@ -6,7 +6,7 @@ use petgraph::graphmap::DiGraphMap;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::input::{Action, GameInput};
+use crate::input::{MenuAction, MenuInput};
 use crate::railroad::{rail_tile_bundle, NetworkRoot, RailGraph, Track};
 use crate::sprites::SpriteAssets;
 use crate::trainbuilder::*;
@@ -121,13 +121,13 @@ impl<'a> SaveGame<'a> {
 
 /// System to listen to keypresses and load/save the game accordingly
 fn save_system(world: &mut World) {
-    let key_input = world.resource::<GameInput>();
-    if key_input.just_pressed(&Action::Save) {
+    let key_input = world.resource::<MenuInput>();
+    if key_input.just_pressed(&MenuAction::Save) {
         save_game(world);
-    } else if key_input.just_pressed(&Action::Load) {
+    } else if key_input.just_pressed(&MenuAction::Reload) {
         clean_game(world);
         load_game(world, SaveGame::from_disk());
-    } else if key_input.just_pressed(&Action::LoadNew) {
+    } else if key_input.just_pressed(&MenuAction::NewGame) {
         clean_game(world);
         load_game(world, SaveGame::default());
     }

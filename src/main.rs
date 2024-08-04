@@ -14,7 +14,7 @@ mod terrain;
 mod tilemap;
 mod trainbuilder;
 mod trains;
-mod ui;
+// mod ui;
 
 pub const BG_COLOR: Color = Color::srgb(0.7, 0.7, 0.7);
 pub const ASPECT_RATIO: f32 = 16.0 / 9.0;
@@ -51,7 +51,7 @@ fn main() {
         .add_plugins(tilemap::TileMapPlugin)
         .add_plugins(trainbuilder::TrainBuildingPlugin)
         .add_plugins(trains::TrainPlugin)
-        .add_plugins(ui::UIOverlayPlugin)
+        // .add_plugins(ui::UIOverlayPlugin)
         .add_plugins(input::InputPlugin)
         .add_plugins(interact::InteractPlugin)
         .add_plugins(driving::ManualDrivingPlugin)
