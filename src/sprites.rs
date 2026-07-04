@@ -23,9 +23,7 @@ const Z_LAYER_TRAINS: f32 = 0.3;
 pub struct AssetPlugin;
 impl Plugin for AssetPlugin {
     fn build(&self, app: &mut App) {
-        if cfg!(debug_assertions) {
-            app.add_systems(PreStartup, load_texture_atlases);
-        }
+        app.add_systems(PreStartup, load_texture_atlases);
     }
 }
 
