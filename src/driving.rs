@@ -135,10 +135,12 @@ fn train_selection_system(
     if let Ok((entity, mut control)) = controlled_train.single_mut() {
         control.throttle = 0.0;
         control.brake = 0.0;
-        commands.entity(entity).remove::<PlayerControlledTrain>();
+        commands.entity(entity).try_remove::<PlayerControlledTrain>();
     }
 
-    commands.entity(ev.train).insert(PlayerControlledTrain);
+    // `try_insert`, not `insert`: another observer reacting to the same TrainClickEvent
+    // (e.g. `coupling_system`) may have already despawned this exact train entity.
+    commands.entity(ev.train).try_insert(PlayerControlledTrain);
 
     debug!("Selected train {:?}", ev.train);
 }
