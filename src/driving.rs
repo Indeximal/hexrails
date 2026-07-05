@@ -89,8 +89,8 @@ fn throttling_system(
     input: Single<&DriveInput>,
 ) {
     for mut controller in train.iter_mut() {
-        controller.throttle = input.value(&DriveAction::Accelerate);
-        controller.brake = input.value(&DriveAction::Brake);
+        controller.throttle = input.button_value(&DriveAction::Accelerate);
+        controller.brake = input.button_value(&DriveAction::Brake);
 
         // allow for somewhat of a one pedal drive
         if !input.pressed(&DriveAction::Brake) && !input.pressed(&DriveAction::Accelerate) {

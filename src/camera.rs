@@ -69,6 +69,9 @@ fn spawn_camera(mut commands: Commands) {
         FlyCamera2d::default(),
         PanCam {
             grab_buttons: vec![MouseButton::Left, MouseButton::Middle],
+            // Keyboard movement is handled by our own FlyCamera2d/leafwing system instead,
+            // and would otherwise conflict with e.g. DriveAction's arrow key bindings.
+            move_keys: bevy_pancam::DirectionKeys::NONE,
             enabled: true,
             zoom_to_cursor: true,
             min_scale: 0.5,
