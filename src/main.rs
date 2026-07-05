@@ -27,7 +27,10 @@ fn main() {
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Some(Window {
-                        resolution: (height * ASPECT_RATIO, height).into(),
+                        resolution: bevy::window::WindowResolution::new(
+                            (height * ASPECT_RATIO) as u32,
+                            height as u32,
+                        ),
                         title: "Hex Rails".to_string(),
                         present_mode: bevy::window::PresentMode::Fifo,
                         resizable: false,

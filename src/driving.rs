@@ -17,22 +17,19 @@ impl Plugin for ManualDrivingPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (
-                throttling_system,
-                auto_extend_train_path,
-                reverse_train_system,
-                // after, so that acceleration gets cleared properly
-                train_selection_system.after(throttling_system),
-            )
+            (throttling_system, auto_extend_train_path, reverse_train_system)
                 .run_if(in_state(MenuState::Driving)),
-        );
+        )
+        // An observer, so it reacts to the click during command-flush, strictly before
+        // `Update` runs — throttling_system then already sees the newly-selected train.
+        .add_observer(train_selection_system.run_if(in_state(MenuState::Driving)));
     }
 }
 
 /// System to extend the path of trains if necessary. Useful mosty for manual driving.
 fn auto_extend_train_path(
     mut trains: Query<(&mut Trail, Option<&PlayerControlledTrain>)>,
-    input: Res<DriveInput>,
+    input: Single<&DriveInput>,
     graph_res: Res<RailGraph>,
 ) {
     let graph = &graph_res.graph;
@@ -89,7 +86,7 @@ fn auto_extend_train_path(
 /// System to set the acceleration of the player driven train
 fn throttling_system(
     mut train: Query<&mut Controller, With<PlayerControlledTrain>>,
-    input: Res<DriveInput>,
+    input: Single<&DriveInput>,
 ) {
     for mut controller in train.iter_mut() {
         controller.throttle = input.value(&DriveAction::Accelerate);
@@ -106,7 +103,7 @@ fn throttling_system(
 fn reverse_train_system(
     mut commands: Commands,
     trains: Query<(Entity, &Velocity), With<PlayerControlledTrain>>,
-    input: Res<DriveInput>,
+    input: Single<&DriveInput>,
 ) {
     if !input.just_pressed(&DriveAction::Reverse) {
         return;
@@ -118,23 +115,24 @@ fn reverse_train_system(
             continue;
         }
 
-        commands.add(move |world: &mut World| world.run_system_once_with(id, reverse_train));
+        commands.queue(move |world: &mut World| {
+            if let Err(e) = world.run_system_once_with(reverse_train, id) {
+                error!("reverse_train failed: {e:?}");
+            }
+        });
     }
 }
 
 /// System to enter and exit trains on click
 fn train_selection_system(
+    trigger: On<TrainClickEvent>,
     mut commands: Commands,
-    mut click_event: EventReader<TrainClickEvent>,
     mut controlled_train: Query<(Entity, &mut Controller), With<PlayerControlledTrain>>,
 ) {
-    // Skip all old events, why not. (please let this not lead to a bug xD)
-    let Some(ev) = click_event.read().last() else {
-        return;
-    };
+    let ev = trigger.event();
 
     // Remove player control from previously active train and release all control.
-    if let Ok((entity, mut control)) = controlled_train.get_single_mut() {
+    if let Ok((entity, mut control)) = controlled_train.single_mut() {
         control.throttle = 0.0;
         control.brake = 0.0;
         commands.entity(entity).remove::<PlayerControlledTrain>();

@@ -56,14 +56,11 @@ pub enum VehicleSprite {
 /// A [`Bundle`] of components for drawing a single sprite from a sprite sheet
 #[derive(Bundle, Clone, Debug, Default)]
 pub struct BaseSpriteBundle {
-    /// Specifies the rendering properties of the sprite, such as color tint and flip.
+    /// Specifies the rendering properties of the sprite, such as color tint and flip,
+    /// as well as the sprite sheet texture and atlas section to draw.
     pub sprite: Sprite,
-    /// The sprite sheet base texture
-    pub texture: Handle<Image>,
-    /// The sprite sheet texture atlas, allowing to draw a custom section of `texture`.
-    pub atlas: TextureAtlas,
-    /// The spatial properties of the sprite, including position and visiblity.
-    pub spatial: SpatialBundle,
+    /// The spatial position of the sprite. Visibility is a required component of [`Sprite`].
+    pub transform: Transform,
 }
 
 impl SpriteAssets {
@@ -75,16 +72,15 @@ impl SpriteAssets {
         BaseSpriteBundle {
             sprite: Sprite {
                 custom_size: Some(Vec2::splat(TILE_SCALE)),
-                ..Default::default()
+                ..Sprite::from_atlas_image(
+                    tex_atlas.1.clone(),
+                    TextureAtlas {
+                        layout: tex_atlas.0.clone(),
+                        index,
+                    },
+                )
             },
-            texture: tex_atlas.1.clone(),
-            atlas: TextureAtlas {
-                layout: tex_atlas.0.clone(),
-                index: index,
-                ..Default::default()
-            },
-            spatial: SpatialBundle::from_transform(Transform::from_translation(Vec3::Z * z)),
-            ..Default::default()
+            transform: Transform::from_translation(Vec3::Z * z),
         }
     }
     pub fn terrain_sprite(&self, sprite: TerrainSprite) -> BaseSpriteBundle {

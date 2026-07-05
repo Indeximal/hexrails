@@ -28,7 +28,7 @@ enum TerrainType {
 /// This system spawns the root node for all the terrain sprites, useful mostly for inspecting.
 fn spawn_terrain_root(mut commands: Commands) {
     commands
-        .spawn(SpatialBundle::default())
+        .spawn((Transform::default(), Visibility::default()))
         .insert(TerrainRoot)
         .insert(Name::new("Terrain"));
 }
@@ -39,7 +39,7 @@ fn spawn_tiles(
     assets: Res<SpriteAssets>,
     root_query: Query<Entity, With<TerrainRoot>>,
 ) {
-    let root_entity = root_query.single();
+    let root_entity = root_query.single().expect("exactly one TerrainRoot entity");
     const RADIUS: i32 = 20;
     for y in -RADIUS..=RADIUS {
         for x in if y >= 0 {
@@ -75,7 +75,7 @@ fn terrain_tile_bundle(
 
     let mut sprite = assets.terrain_sprite(sprite_id);
     // Place in the world
-    sprite.spatial.transform.translation += position.world_pos().extend(0.);
+    sprite.transform.translation += position.world_pos().extend(0.);
 
     (
         sprite,

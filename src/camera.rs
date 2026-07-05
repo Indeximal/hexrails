@@ -5,8 +5,8 @@
 //! <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd> or <kbd>MMB</kbd>/<kbd>RMB</kbd> to move the camera.
 //! Scroll to zoom in/out.
 
+use bevy::camera::ScalingMode;
 use bevy::prelude::*;
-use bevy::render::camera::ScalingMode;
 use bevy_pancam::{PanCam, PanCamPlugin};
 
 use crate::input::{CameraAction, CameraInput};
@@ -52,26 +52,30 @@ struct FlyCamera2d {
 }
 
 fn spawn_camera(mut commands: Commands) {
-    // allow Z layer between 0 and 1
-    let mut camera = Camera2dBundle::new_with_far(2.0);
-
-    camera.projection.scale = 3.0;
-    camera.projection.scaling_mode = ScalingMode::Fixed {
-        width: 2.0 * ASPECT_RATIO,
-        height: 2.0,
-    };
-    commands
-        .spawn(camera)
-        .insert(WorldViewCam)
-        .insert(FlyCamera2d::default())
-        .insert(PanCam {
+    commands.spawn((
+        Camera2d,
+        // `default_2d()`'s near/far (-1000..1000) already comfortably covers the sprite
+        // Z layers (0.1..0.3) used across the game, so the camera can stay at its default
+        // identity transform without needing custom near/far/translation math.
+        Projection::Orthographic(OrthographicProjection {
+            scale: 3.0,
+            scaling_mode: ScalingMode::Fixed {
+                width: 2.0 * ASPECT_RATIO,
+                height: 2.0,
+            },
+            ..OrthographicProjection::default_2d()
+        }),
+        WorldViewCam,
+        FlyCamera2d::default(),
+        PanCam {
             grab_buttons: vec![MouseButton::Left, MouseButton::Middle],
             enabled: true,
             zoom_to_cursor: true,
             min_scale: 0.5,
-            max_scale: Some(12.0),
+            max_scale: 12.0,
             ..Default::default()
-        });
+        },
+    ));
 }
 
 impl Default for FlyCamera2d {
@@ -89,15 +93,13 @@ impl Default for FlyCamera2d {
 
 fn camera_2d_movement_system(
     time: Res<Time>,
-    action_state: Res<CameraInput>,
+    action_state: Single<&CameraInput>,
     mut query: Query<(&mut FlyCamera2d, &mut Transform)>,
 ) {
     for (mut options, mut transform) in query.iter_mut() {
         let (axis_h, axis_v) = if options.enabled {
-            let axis = action_state
-                .clamped_axis_pair(&CameraAction::Move)
-                .expect("Camera Motion should be a dual axis");
-            (axis.x(), axis.y())
+            let axis = action_state.clamped_axis_pair(&CameraAction::Move);
+            (axis.x, axis.y)
         } else {
             (0.0, 0.0)
         };
@@ -115,14 +117,14 @@ fn camera_2d_movement_system(
             Vec2::ZERO
         };
 
-        options.velocity += accel * time.delta_seconds();
+        options.velocity += accel * time.delta_secs();
 
         // clamp within max speed
         if options.velocity.length() > options.max_speed {
             options.velocity = options.velocity.normalize() * options.max_speed;
         }
 
-        let delta_friction = friction * time.delta_seconds();
+        let delta_friction = friction * time.delta_secs();
 
         options.velocity =
             if (options.velocity + delta_friction).signum() != options.velocity.signum() {

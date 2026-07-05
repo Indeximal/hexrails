@@ -84,14 +84,14 @@ impl<'a> SaveGame<'a> {
     }
 
     fn from_world(world: &'a mut World) -> Self {
-        let mut trains_query = world.query::<(Entity, &Children, &Trail, &Velocity)>();
+        let mut trains_query = world.query::<(Entity, &Vehicles, &Trail, &Velocity)>();
         let mut wagons_query = world.query::<(&TrainIndex, &VehicleType, &VehicleStats)>();
 
         let mut trains = Vec::new();
-        for (_, children, head, velocity) in trains_query.iter(world) {
+        for (_, vehicles, head, velocity) in trains_query.iter(world) {
             // Thanks a lot to https://stackoverflow.com/a/72605922/19331219
-            let mut wagons = (0..children.len()).map(|_| None).collect::<Vec<_>>();
-            for &child in children.iter() {
+            let mut wagons = (0..vehicles.len()).map(|_| None).collect::<Vec<_>>();
+            for child in vehicles.iter() {
                 if let Ok((unit_id, unit_type, unit_stats)) = wagons_query.get(world, child) {
                     let wagon = SaveWagon {
                         wagon_type: SerDeserCell::Ser(&unit_type),
@@ -121,13 +121,20 @@ impl<'a> SaveGame<'a> {
 
 /// System to listen to keypresses and load/save the game accordingly
 fn save_system(world: &mut World) {
-    let key_input = world.resource::<MenuInput>();
-    if key_input.just_pressed(&MenuAction::Save) {
+    let mut query = world.query::<&MenuInput>();
+    let Ok(key_input) = query.single(world) else {
+        return;
+    };
+    let save = key_input.just_pressed(&MenuAction::Save);
+    let reload = key_input.just_pressed(&MenuAction::Reload);
+    let new_game = key_input.just_pressed(&MenuAction::NewGame);
+
+    if save {
         save_game(world);
-    } else if key_input.just_pressed(&MenuAction::Reload) {
+    } else if reload {
         clean_game(world);
         load_game(world, SaveGame::from_disk());
-    } else if key_input.just_pressed(&MenuAction::NewGame) {
+    } else if new_game {
         clean_game(world);
         load_game(world, SaveGame::default());
     }
@@ -150,12 +157,12 @@ fn clean_game(world: &mut World) {
     let mut rail_root = world.query_filtered::<Entity, With<NetworkRoot>>();
     // This iter then collect then iter is possible because, no two matching entites are in hierachical relation.
     for entity in rail_root.iter(world).collect::<Vec<Entity>>().iter() {
-        world.entity_mut(entity.clone()).despawn_recursive();
+        world.entity_mut(entity.clone()).despawn();
     }
 
     let mut trains = world.query_filtered::<Entity, With<Trail>>();
     for entity in trains.iter_mut(world).collect::<Vec<Entity>>().iter() {
-        world.entity_mut(entity.clone()).despawn_recursive();
+        world.entity_mut(entity.clone()).despawn();
     }
 }
 
@@ -191,15 +198,14 @@ fn load_game(world: &mut World, savegame: SaveGame) {
                 velocity: train.velocity.get(),
                 controller: Default::default(),
                 name: Name::new("Train"),
-                spatial: Default::default(),
                 marker: TrainMarker,
             })
-            .push_children(&wagons);
+            .add_related::<VehicleOf>(&wagons);
     }
 
     // Rails
     let rail_root = commands
-        .spawn(SpatialBundle::default())
+        .spawn((Transform::default(), Visibility::default()))
         .insert(NetworkRoot)
         .insert(Name::new("Rail Network"))
         .id();

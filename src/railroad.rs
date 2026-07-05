@@ -125,14 +125,14 @@ impl RailGraph {
 fn rail_builder(
     mut commands: Commands,
     assets: Res<SpriteAssets>,
-    mut click_event: EventReader<TileClickEvent>,
+    mut click_event: MessageReader<TileClickEvent>,
     mut rail_graph: ResMut<RailGraph>,
     root_query: Query<Entity, With<NetworkRoot>>,
     state: Res<State<BuildingState>>,
 ) {
     let BuildingState::LayTrack(rail_type) = *state.get();
     let rail_graph = rail_graph.as_mut();
-    let root_entity = root_query.single();
+    let root_entity = root_query.single().expect("exactly one NetworkRoot entity");
 
     for evt in click_event.read() {
         if let Some(side) = evt.side {
@@ -171,11 +171,8 @@ pub fn rail_tile_bundle(assets: &SpriteAssets, track: Track) -> impl Bundle {
         TrackType::CurvedRight => RailSprite::CurvedRight,
     });
     sprite.sprite.flip_y = flipped;
-    sprite
-        .spatial
-        .transform
-        .rotate_z(track.joint.side.to_angle());
-    sprite.spatial.transform.translation += track.joint.tile.world_pos().extend(0.);
+    sprite.transform.rotate_z(track.joint.side.to_angle());
+    sprite.transform.translation += track.joint.tile.world_pos().extend(0.);
 
     (
         sprite,

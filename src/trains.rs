@@ -29,7 +29,8 @@ impl Plugin for TrainPlugin {
 /// The components of an entity that make up a logical train.
 ///
 /// ## Additional components:
-/// - Wagons and locomotives are [`Children`] of this entity with components of [`VehicleBundle`].
+/// - Wagons and locomotives are related to this entity via the [`Vehicles`]/[`VehicleOf`]
+///   relationship, with components of [`VehicleBundle`].
 /// - At most one train has a [`PlayerControlledTrain`] attached, meaning it is the one
 ///   currently controlled by the player.
 #[derive(Bundle)]
@@ -41,8 +42,35 @@ pub struct TrainBundle {
 
     /// Currently always "Train" for inspection
     pub name: Name,
-    /// Always default, used for hierarchy only
-    pub spatial: SpatialBundle,
+}
+
+/// Which train a vehicle (wagon or locomotive) logically belongs to.
+///
+/// This is deliberately *not* [`ChildOf`], since a vehicle's [`Transform`] is written directly
+/// in world space every frame by [`position_train_units`] rather than being relative to the
+/// train, so real spatial parenting (and its `GlobalTransform` propagation) would be wasted
+/// work and a footgun if the train entity ever got a non-identity transform.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[relationship(relationship_target = Vehicles)]
+pub struct VehicleOf(pub Entity);
+
+impl VehicleOf {
+    pub fn train(&self) -> Entity {
+        self.0
+    }
+}
+
+/// The vehicles (wagons/locomotives) belonging to a train, maintained automatically via
+/// [`VehicleOf`]. Despawning the train also despawns all its vehicles (`linked_spawn`).
+#[derive(Component, Debug, Default)]
+#[relationship_target(relationship = VehicleOf, linked_spawn)]
+pub struct Vehicles(Vec<Entity>);
+
+impl std::ops::Deref for Vehicles {
+    type Target = [Entity];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 #[derive(Component)]
@@ -280,7 +308,6 @@ impl TrainBundle {
             },
             controller: Default::default(),
             name: Name::new("Train"),
-            spatial: Default::default(),
         }
     }
 }
@@ -291,15 +318,15 @@ impl TrainBundle {
 fn tick_velocity(
     time: Res<Time<Fixed>>,
     mut train: Query<
-        (&Controller, &mut Velocity, &Children),
+        (&Controller, &mut Velocity, &Vehicles),
         (With<TrainMarker>, Without<Crashed>),
     >,
     vehicles: Query<&VehicleStats>,
 ) {
-    for (controller, mut velocity, children) in train.iter_mut() {
-        let total_stats = children
+    for (controller, mut velocity, train_vehicles) in train.iter_mut() {
+        let total_stats = train_vehicles
             .iter()
-            .filter_map(|&id| vehicles.get(id).ok())
+            .filter_map(|id| vehicles.get(id).ok())
             .fold(VehicleStats::additive_identiy(), VehicleStats::add);
 
         // Model constant brake force
@@ -309,7 +336,7 @@ fn tick_velocity(
         let acceleration =
             controller.throttle * total_stats.acceleration_force / total_stats.weight;
 
-        let delta_velocity = (acceleration - decceleration) * time.delta_seconds();
+        let delta_velocity = (acceleration - decceleration) * time.delta_secs();
         velocity.velocity = (velocity.velocity + delta_velocity).clamp(0., velocity.max_velocity);
     }
 }
@@ -320,7 +347,7 @@ fn tick_trains(
     mut trains: Query<(&mut Trail, &Velocity), With<TrainMarker>>,
 ) {
     for (mut train, velocity) in trains.iter_mut() {
-        train.path_progress += velocity.velocity * time.delta_seconds() / METER_PER_TRACK;
+        train.path_progress += velocity.velocity * time.delta_secs() / METER_PER_TRACK;
         // TODO: crash
         train.path_progress = train.path_progress.clamp(0., (train.path.len() - 1) as f32);
     }
@@ -329,12 +356,12 @@ fn tick_trains(
 /// System to update the transform of the train wagons.
 /// Precondition: progress <= path.len() - 1
 fn position_train_units(
-    mut vehicles: Query<(&Parent, &mut Transform, &TrainIndex)>,
+    mut vehicles: Query<(&VehicleOf, &mut Transform, &TrainIndex)>,
     trains: Query<&Trail, With<TrainMarker>>,
 ) {
-    for (parent, mut transform, unit) in vehicles.iter_mut() {
-        let Ok(trail) = trains.get(parent.get()) else {
-            error!("Vehilce did not have a Train as a Parent");
+    for (vehicle_of, mut transform, unit) in vehicles.iter_mut() {
+        let Ok(trail) = trains.get(vehicle_of.train()) else {
+            error!("Vehilce did not have a Train via VehicleOf");
             continue;
         };
         let Ok((start, end, interp)) = trail.point_on_trail(unit.position as f32 + 0.5) else {
@@ -346,16 +373,16 @@ fn position_train_units(
 }
 
 fn update_tint(
-    trains: Query<(&Children, Option<&Crashed>), With<TrainMarker>>,
+    trains: Query<(&Vehicles, Option<&Crashed>), With<TrainMarker>>,
     mut vehicles: Query<&mut Sprite>,
 ) {
-    for (children, has_crashed) in &trains {
+    for (train_vehicles, has_crashed) in &trains {
         let color = if has_crashed.is_none() {
             Color::WHITE
         } else {
             Srgba::gray(0.7).into()
         };
-        for &child in children.iter() {
+        for child in train_vehicles.iter() {
             if let Ok(mut sprite) = vehicles.get_mut(child) {
                 sprite.color = color;
             }
@@ -384,14 +411,14 @@ fn move_train_unit(output: &mut Transform, start: Joint, end: Joint, t: f32) {
 /// System to reverse a whole train
 pub fn reverse_train(
     In(train_id): In<Entity>,
-    mut trains: Query<(&mut Trail, &Children)>,
+    mut trains: Query<(&mut Trail, &Vehicles)>,
     mut vehicles: Query<&mut TrainIndex>,
 ) {
-    let (mut trail, children) = ok_or_return!(trains.get_mut(train_id));
+    let (mut trail, train_vehicles) = ok_or_return!(trains.get_mut(train_id));
     trail.reverse();
 
     // Reverse the wagon indices
-    for &e in children.iter() {
+    for e in train_vehicles.iter() {
         if let Ok(mut idx) = vehicles.get_mut(e) {
             idx.position = trail.length - idx.position - 1;
         }

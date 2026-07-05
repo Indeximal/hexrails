@@ -1,7 +1,7 @@
 use bevy::{ecs::system::RunSystemOnce, prelude::*};
-use bevy_rapier2d::{
-    plugin::RapierContext,
-    prelude::{ActiveCollisionTypes, ActiveEvents, Collider, CollisionGroups, Group, Sensor},
+use bevy_rapier2d::prelude::{
+    ActiveCollisionTypes, ActiveEvents, Collider, CollisionGroups, Group, ReadRapierContext,
+    Sensor,
 };
 use petgraph::EdgeDirection;
 
@@ -19,11 +19,10 @@ pub struct TrainBuildingPlugin;
 
 impl Plugin for TrainBuildingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            (train_builder, append_vehicle_system).run_if(in_state(MenuState::Spawning)),
-        )
-        .add_systems(Update, (uncoupling_system, coupling_system));
+        app.add_systems(Update, train_builder.run_if(in_state(MenuState::Spawning)))
+            .add_observer(append_vehicle_system.run_if(in_state(MenuState::Spawning)))
+            .add_observer(uncoupling_system)
+            .add_observer(coupling_system);
     }
 }
 
@@ -115,7 +114,7 @@ impl Trail {
 fn train_builder(
     mut commands: Commands,
     atlas: Res<SpriteAssets>,
-    mut click_event: EventReader<TileClickEvent>,
+    mut click_event: MessageReader<TileClickEvent>,
     rail_graph: Res<RailGraph>,
     state: Res<State<SpawningState>>,
 ) {
@@ -155,71 +154,69 @@ fn train_builder(
 /// FIXME: this is slightly fucked if you have a train without power, as you cannot extend
 /// the path without driving right now.
 fn append_vehicle_system(
+    trigger: On<TrainClickEvent>,
     state: Res<State<SpawningState>>,
-    mut trigger: EventReader<TrainClickEvent>,
     trains: Query<&Trail>,
     mut commands: Commands,
     atlas: Res<SpriteAssets>,
 ) {
     let SpawningState::SpawnVehicle(wagon_type) = state.get() else {
-        // Events are irrelevant
-        trigger.clear();
+        // Event is irrelevant
         return;
     };
 
-    for ev in trigger.read() {
-        let train_id = ev.train;
-        let Ok(trail) = trains.get(train_id) else {
-            warn!("Mismatch train query");
-            continue;
-        };
-        if ev.bumper_index != trail.length {
-            // Can only append at the end
-            continue;
-        }
-        if trail.length as f32 + 1. > trail.path_progress {
-            warn!("Cannot append vehicle to train {train_id:?} since the trail is too short");
-            continue;
-        }
-
-        debug!("Appending a vehicle to train {train_id:?}");
-
-        let new_wagon = spawn_wagon(
-            &mut commands,
-            &atlas,
-            *wagon_type,
-            VehicleStats::default_for_type(*wagon_type),
-            ev.bumper_index,
-        );
-        commands.entity(train_id).add_child(new_wagon);
-        commands.add(move |world: &mut World| {
-            let mut train_q = world.query::<&mut Trail>();
-            let Ok(mut trail) = train_q.get_mut(world, train_id) else {
-                warn!("appending to probably despawned train ?!");
-                return;
-            };
-            trail.length += 1;
-            if !trail.check_invariant() {
-                // This could be due to a bad interleaving...
-                error!("adding vehicle broke invariant even though it was checked!");
-            }
-        });
+    let ev = trigger.event();
+    let train_id = ev.train;
+    let Ok(trail) = trains.get(train_id) else {
+        warn!("Mismatch train query");
+        return;
+    };
+    if ev.bumper_index != trail.length {
+        // Can only append at the end
+        return;
     }
+    if trail.length as f32 + 1. > trail.path_progress {
+        warn!("Cannot append vehicle to train {train_id:?} since the trail is too short");
+        return;
+    }
+
+    debug!("Appending a vehicle to train {train_id:?}");
+
+    let new_wagon = spawn_wagon(
+        &mut commands,
+        &atlas,
+        *wagon_type,
+        VehicleStats::default_for_type(*wagon_type),
+        ev.bumper_index,
+    );
+    commands.entity(new_wagon).insert(VehicleOf(train_id));
+    commands.queue(move |world: &mut World| {
+        let mut train_q = world.query::<&mut Trail>();
+        let Ok(mut trail) = train_q.get_mut(world, train_id) else {
+            warn!("appending to probably despawned train ?!");
+            return;
+        };
+        trail.length += 1;
+        if !trail.check_invariant() {
+            // This could be due to a bad interleaving...
+            error!("adding vehicle broke invariant even though it was checked!");
+        }
+    });
 }
 
 fn coupling_system(
+    trigger: On<TrainClickEvent>,
     mut commands: Commands,
-    mut trigger: EventReader<TrainClickEvent>,
-    rapier_context: Res<RapierContext>,
+    rapier_context: ReadRapierContext,
     trains: Query<&Trail, With<TrainMarker>>,
-    vehicles: Query<&Parent, With<VehicleType>>,
-    bumpers: Query<(&Parent, &BumperNode)>,
+    vehicles: Query<&VehicleOf, With<VehicleType>>,
+    bumpers: Query<(&ChildOf, &BumperNode)>,
 ) {
     fn couple_trains(
         In((t1, d1, t2, d2)): In<(Entity, BumperNode, Entity, BumperNode)>,
         mut commands: Commands,
         trains: Query<&Trail, With<TrainMarker>>,
-        child_query: Query<&Children>,
+        child_query: Query<&Vehicles>,
     ) {
         let trail1 = ok_or_return!(trains.get(t1), "not a train");
         let trail2 = ok_or_return!(trains.get(t2), "not a train");
@@ -266,130 +263,147 @@ fn coupling_system(
         // Queue all the commands. I rely on them being executed in order.
         if let Some(reverse) = reverse {
             // Reverse train indices of one of the trains
-            commands
-                .add(move |world: &mut World| world.run_system_once_with(reverse, reverse_train));
+            commands.queue(move |world: &mut World| {
+                if let Err(e) = world.run_system_once_with(reverse_train, reverse) {
+                    error!("reverse_train failed: {e:?}");
+                }
+            });
         }
-        commands.add(move |world: &mut World| {
-            world.run_system_once_with((back_id, front_len as i16), reindex_train)
+        commands.queue(move |world: &mut World| {
+            if let Err(e) =
+                world.run_system_once_with(reindex_train, (back_id, front_len as i16))
+            {
+                error!("reindex_train failed: {e:?}");
+            }
         });
         commands
             .entity(front_id)
             // Overrite old trail component
             .insert(new_trail)
             // And append all newly gained vehicles
-            .push_children(ok_or_return!(
+            .add_related::<VehicleOf>(ok_or_return!(
                 child_query.get(back_id),
-                "back has no children?"
+                "back has no vehicles?"
             ));
-        // No recursive needed, children have just been moved
+        // No recursive needed, vehicles have just been moved
         commands.entity(back_id).despawn();
     }
 
-    for ev in trigger.read() {
-        let Ok(trail) = trains.get(ev.train) else {
-            error!("Train not found");
-            continue;
-        };
+    let ev = trigger.event();
+    let Ok(trail) = trains.get(ev.train) else {
+        error!("Train not found");
+        return;
+    };
 
-        if !(ev.bumper_index == 0 || ev.bumper_index == trail.length) {
-            // cannot couple non-end vehicle
-            continue;
-        }
-
-        // this should ideally be exactly one pair
-        let mut pairs_iter = rapier_context
-            .intersection_pairs_with(ev.bumper_entity)
-            .filter(|(b1, b2, hit)| *hit && b1 != b2);
-        let Some((b1, b2, _)) = pairs_iter.next() else {
-            // nothing to couple to
-            continue;
-        };
-        if let Some((b3, b4, _)) = pairs_iter.next() {
-            warn!("Conflicting coupling: {b1:?}-{b2:?} vs {b3:?}-{b4:?}");
-            continue;
-        }
-
-        let (Ok((v1, &d1)), Ok((v2, &d2))) = (bumpers.get(b1), bumpers.get(b2)) else {
-            error!("BumperNode should always be attached to a vehicle!");
-            continue;
-        };
-        let (Ok(t1), Ok(t2)) = (vehicles.get(v1.get()), vehicles.get(v2.get())) else {
-            error!("Vehicle should always be attached to a train!");
-            continue;
-        };
-        let (t1, t2) = (t1.get(), t2.get());
-        if t1 == t2 {
-            warn!("Trying to self-couple: {t1:?}");
-            continue;
-        }
-
-        commands.add(move |world: &mut World| {
-            // This actually leads to a two deep `run_system_once_with` invocation,
-            // I hope this is fine.
-            // TODO: for better performance, use a registered system.
-            world.run_system_once_with((t1, d1, t2, d2), couple_trains);
-        })
+    if !(ev.bumper_index == 0 || ev.bumper_index == trail.length) {
+        // cannot couple non-end vehicle
+        return;
     }
+
+    let Ok(rapier_context) = rapier_context.single() else {
+        return;
+    };
+    // this should ideally be exactly one pair
+    let mut pairs_iter = rapier_context
+        .simulation
+        .intersection_pairs_with(rapier_context.colliders, ev.bumper_entity)
+        .filter(|(b1, b2, hit)| *hit && b1 != b2);
+    let Some((b1, b2, _)) = pairs_iter.next() else {
+        // nothing to couple to
+        return;
+    };
+    if let Some((b3, b4, _)) = pairs_iter.next() {
+        warn!("Conflicting coupling: {b1:?}-{b2:?} vs {b3:?}-{b4:?}");
+        return;
+    }
+
+    let (Ok((v1, &d1)), Ok((v2, &d2))) = (bumpers.get(b1), bumpers.get(b2)) else {
+        error!("BumperNode should always be attached to a vehicle!");
+        return;
+    };
+    let (Ok(t1), Ok(t2)) = (vehicles.get(v1.parent()), vehicles.get(v2.parent())) else {
+        error!("Vehicle should always be attached to a train!");
+        return;
+    };
+    let (t1, t2) = (t1.train(), t2.train());
+    if t1 == t2 {
+        warn!("Trying to self-couple: {t1:?}");
+        return;
+    }
+
+    commands.queue(move |world: &mut World| {
+        // This actually leads to a two deep `run_system_once_with` invocation,
+        // I hope this is fine.
+        // TODO: for better performance, use a registered system.
+        if let Err(e) = world.run_system_once_with(couple_trains, (t1, d1, t2, d2)) {
+            error!("couple_trains failed: {e:?}");
+        }
+    })
 }
 
 fn uncoupling_system(
+    trigger: On<TrainClickEvent>,
     mut commands: Commands,
-    mut trigger: EventReader<TrainClickEvent>,
     vehicles: Query<(Entity, &TrainIndex)>,
-    trains: Query<(Entity, &Trail, &Children)>,
+    trains: Query<(Entity, &Trail, &Vehicles)>,
 ) {
-    for ev in trigger.read() {
-        let Ok((train, trail, train_children)) = trains.get(ev.train) else {
-            warn!("Train click event for not-query-matching entity (despawned or malformed)");
-            continue;
-        };
+    let ev = trigger.event();
+    let Ok((train, trail, train_vehicles)) = trains.get(ev.train) else {
+        warn!("Train click event for not-query-matching entity (despawned or malformed)");
+        return;
+    };
 
-        let front_length = ev.bumper_index;
-        let back_length = trail.length - ev.bumper_index;
+    let front_length = ev.bumper_index;
+    let back_length = trail.length - ev.bumper_index;
 
-        if front_length == 0 || back_length == 0 {
-            // Already at an end of the train
-            continue;
-        }
-
-        debug!("Uncoupling {back_length} vehicles from the train");
-
-        // Changes that should happen simultaneoulsy
-        // (otherwise breaks invariants and leads to weird bugs):
-        // - Spawn new trainbundle, clone and adjust trail
-        // - reparent uncoupled vehicles (automatically removed when inserting)
-        // - update trainbundle: changed trail length
-        // - change TrainIndex on uncoupled vehicles
-
-        // This is unsorted tho
-        let to_reparent = train_children
-            .iter()
-            .filter_map(|&e| vehicles.get(e).ok())
-            .filter(|(_, idx)| idx.position >= ev.bumper_index)
-            .map(|(e, _)| e)
-            .collect::<Vec<_>>();
-
-        let mut back_trail = Trail {
-            // This shouldn't break any trail invariants...
-            path: trail.path.clone(),
-            path_progress: trail.path_progress - front_length as f32,
-            length: back_length,
-        };
-        back_trail.remove_lead();
-
-        let new_train_id = commands
-            .spawn(TrainBundle::new(
-                back_trail, 55.0, // approx 200kmh
-            ))
-            .push_children(&to_reparent)
-            .id();
-        commands.add(move |world: &mut World| {
-            // The front trail has to be shortened by back_length,
-            // while the vehicles in to_reindex have to have front_length subtracted.
-            world.run_system_once_with((new_train_id, -(front_length as i16)), reindex_train);
-            world.run_system_once_with((train, front_length), set_train_length);
-        })
+    if front_length == 0 || back_length == 0 {
+        // Already at an end of the train
+        return;
     }
+
+    debug!("Uncoupling {back_length} vehicles from the train");
+
+    // Changes that should happen simultaneoulsy
+    // (otherwise breaks invariants and leads to weird bugs):
+    // - Spawn new trainbundle, clone and adjust trail
+    // - reparent uncoupled vehicles (automatically removed when inserting)
+    // - update trainbundle: changed trail length
+    // - change TrainIndex on uncoupled vehicles
+
+    // This is unsorted tho
+    let to_reparent = train_vehicles
+        .iter()
+        .filter_map(|e| vehicles.get(e).ok())
+        .filter(|(_, idx)| idx.position >= ev.bumper_index)
+        .map(|(e, _)| e)
+        .collect::<Vec<_>>();
+
+    let mut back_trail = Trail {
+        // This shouldn't break any trail invariants...
+        path: trail.path.clone(),
+        path_progress: trail.path_progress - front_length as f32,
+        length: back_length,
+    };
+    back_trail.remove_lead();
+
+    let new_train_id = commands
+        .spawn(TrainBundle::new(
+            back_trail, 55.0, // approx 200kmh
+        ))
+        .add_related::<VehicleOf>(&to_reparent)
+        .id();
+    commands.queue(move |world: &mut World| {
+        // The front trail has to be shortened by back_length,
+        // while the vehicles in to_reindex have to have front_length subtracted.
+        if let Err(e) =
+            world.run_system_once_with(reindex_train, (new_train_id, -(front_length as i16)))
+        {
+            error!("reindex_train failed: {e:?}");
+        }
+        if let Err(e) = world.run_system_once_with(set_train_length, (train, front_length)) {
+            error!("set_train_length failed: {e:?}");
+        }
+    })
 }
 
 /// A mutating part of the `uncoupling_system`, since I want to apply them
@@ -411,16 +425,16 @@ fn set_train_length(
 /// this is only a part of the coupling/uncoupling process
 fn reindex_train(
     In((train_id, diff)): In<(Entity, i16)>,
-    train: Query<&Children, With<TrainMarker>>,
+    train: Query<&Vehicles, With<TrainMarker>>,
     mut vehicles: Query<&mut TrainIndex, With<VehicleType>>,
 ) {
-    let Ok(children) = train.get(train_id) else {
+    let Ok(train_vehicles) = train.get(train_id) else {
         error!("reindex_train called with non-train entity");
         return;
     };
 
     // Somehow doesn't allow a for loop
-    let mut iter = vehicles.iter_many_mut(children.iter());
+    let mut iter = vehicles.iter_many_mut(train_vehicles.iter());
     while let Some(mut idx) = iter.fetch_next() {
         idx.position = idx.position.saturating_add_signed(diff);
     }
@@ -451,7 +465,7 @@ fn create_new_train(
         0,
     );
 
-    commands
+    let train_id = commands
         .spawn(TrainBundle::new(
             Trail {
                 path: vec![face, next_face],
@@ -460,7 +474,8 @@ fn create_new_train(
             },
             55.0, // approx 200kmh
         ))
-        .add_child(first_wagon);
+        .id();
+    commands.entity(first_wagon).insert(VehicleOf(train_id));
 }
 
 /// Helper to spawn a wagon sprite
@@ -478,9 +493,7 @@ pub fn spawn_wagon(
 
     fn spawn_bumper(commands: &mut Commands, translation: f32, uncouple_dir: BumperNode) -> Entity {
         commands
-            .spawn(TransformBundle::from_transform(
-                Transform::from_translation(Vec3::X * translation),
-            ))
+            .spawn(Transform::from_translation(Vec3::X * translation))
             .insert(InteractionNode {
                 radius: TILE_WIDTH / 4.,
             })

@@ -2,7 +2,6 @@ use std::f32::consts::PI;
 
 use bevy::color::palettes;
 use bevy::prelude::*;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier2d::render::RapierDebugRenderPlugin;
 
 use crate::input::{
@@ -17,18 +16,18 @@ pub struct DebugPlugin;
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
         if cfg!(debug_assertions) {
-            app.add_plugins(
-                WorldInspectorPlugin::new().run_if(in_state(DebugGizmosState::Enabled)),
-            )
-            // TODO: toggle rapier gizmos aswell
-            .add_plugins(RapierDebugRenderPlugin::default())
-            .register_type::<Velocity>()
-            .add_systems(
-                Update,
-                (draw_rail_graph, draw_train_paths).run_if(in_state(DebugGizmosState::Enabled)),
-            )
-            .add_systems(Update, (log_interaction_events, log_collisions))
-            .add_systems(Update, help_print_states);
+            app
+                // TODO: toggle rapier gizmos aswell
+                .add_plugins(RapierDebugRenderPlugin::default())
+                .register_type::<Velocity>()
+                .add_systems(
+                    Update,
+                    (draw_rail_graph, draw_train_paths)
+                        .run_if(in_state(DebugGizmosState::Enabled)),
+                )
+                .add_observer(log_node_click_events)
+                .add_systems(Update, (log_tile_click_events, log_collisions))
+                .add_systems(Update, help_print_states);
         }
         // For framerate:
         // .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
@@ -37,7 +36,7 @@ impl Plugin for DebugPlugin {
 }
 
 fn help_print_states(
-    input: Res<MenuInput>,
+    input: Single<&MenuInput>,
     menu_state: Res<State<MenuState>>,
     build_state: Res<State<BuildingState>>,
     spawn_state: Res<State<SpawningState>>,
@@ -87,21 +86,18 @@ fn draw_train_paths(trains: Query<(&Trail, Option<&PlayerControlledTrain>)>, mut
     }
 }
 
-fn log_collisions(mut collision_events: EventReader<bevy_rapier2d::prelude::CollisionEvent>) {
+fn log_collisions(mut collision_events: MessageReader<bevy_rapier2d::prelude::CollisionEvent>) {
     for collision_event in collision_events.read() {
         trace!("CollisionEvent::{collision_event:?}");
     }
 }
 
-fn log_interaction_events(
-    mut t_evs: EventReader<TileClickEvent>,
-    mut n_evs: EventReader<NodeClickEvent>,
-) {
+fn log_tile_click_events(mut t_evs: MessageReader<TileClickEvent>) {
     for ev in t_evs.read() {
         trace!("{ev:?}");
     }
+}
 
-    for ev in n_evs.read() {
-        trace!("{ev:?}");
-    }
+fn log_node_click_events(trigger: On<NodeClickEvent>) {
+    trace!("{:?}", trigger.event());
 }

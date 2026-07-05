@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::CollisionEvent;
 
-use crate::trains::{Crashed, TrainIndex, VehicleType, Velocity};
+use crate::trains::{Crashed, TrainIndex, VehicleOf, VehicleType, Velocity};
 
 pub struct CollisionPlugin;
 
@@ -20,8 +20,8 @@ impl Plugin for CollisionPlugin {
 /// on curves, therefore those collisions need to be ignored.
 fn crash_on_collision(
     mut commands: Commands,
-    mut collision_events: EventReader<CollisionEvent>,
-    vehicles: Query<(&Parent, &TrainIndex), With<VehicleType>>,
+    mut collision_events: MessageReader<CollisionEvent>,
+    vehicles: Query<(&VehicleOf, &TrainIndex), With<VehicleType>>,
     mut trains: Query<&mut Velocity>,
 ) {
     for collision_event in collision_events.read() {
@@ -35,7 +35,7 @@ fn crash_on_collision(
             // Wasn't two vehicles
             continue;
         };
-        let (t1, t2) = (t1.get(), t2.get());
+        let (t1, t2) = (t1.train(), t2.train());
 
         if t1 == t2 {
             if index1.position + 1 == index2.position || index2.position + 1 == index1.position {
@@ -44,7 +44,7 @@ fn crash_on_collision(
             }
 
             debug!("Train {t1:?} self collided");
-            if let Some(mut cmd) = commands.get_entity(t1) {
+            if let Ok(mut cmd) = commands.get_entity(t1) {
                 cmd.insert(Crashed);
             }
             if let Ok(mut velocity1) = trains.get_mut(t1) {
@@ -54,13 +54,13 @@ fn crash_on_collision(
             debug!("Trains {t1:?} and {t2:?} crashed");
 
             // ignore errors, should be impossible anyway.
-            if let Some(mut cmd) = commands.get_entity(t1) {
+            if let Ok(mut cmd) = commands.get_entity(t1) {
                 cmd.insert(Crashed);
             }
             if let Ok(mut velocity) = trains.get_mut(t1) {
                 velocity.velocity = 0.0;
             }
-            if let Some(mut cmd) = commands.get_entity(t2) {
+            if let Ok(mut cmd) = commands.get_entity(t2) {
                 cmd.insert(Crashed);
             }
             if let Ok(mut velocity) = trains.get_mut(t2) {

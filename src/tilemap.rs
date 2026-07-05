@@ -176,7 +176,7 @@ impl Joint {
             return Err(tc);
         }
         // angle_between gives a clockwise angle from -PI to PI
-        let angle = -diff.angle_between(Vec2::X);
+        let angle = -diff.angle_to(Vec2::X);
         Ok(Self {
             tile: tc,
             side: Direction::from_sixth_turns(((angle + 2. * PI) / (PI / 3.)).round() as i8),
